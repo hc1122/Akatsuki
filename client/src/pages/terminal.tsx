@@ -745,16 +745,16 @@ export default function Terminal() {
             </span>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2 p-2">
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-center" style={{ color: "var(--t-gn)" }}>CALL (CE)</span>
-            <button data-testid="button-buy-ce-mobile" disabled={!selectedStrike?.ce_ts} onClick={() => fire("B", "CE")} className="py-3 rounded-lg font-mono text-sm font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.97] transition-transform" style={{ background: "linear-gradient(135deg, #10b981 0%, #059669 100%)", boxShadow: selectedStrike?.ce_ts ? "0 2px 8px rgba(16,185,129,.3)" : "none" }}>{"\u25B2"} BUY CE</button>
-            <button data-testid="button-sell-ce-mobile" disabled={!selectedStrike?.ce_ts} onClick={() => fire("S", "CE")} className="py-3 rounded-lg font-mono text-sm font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.97] transition-transform" style={{ background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)", boxShadow: selectedStrike?.ce_ts ? "0 2px 8px rgba(239,68,68,.3)" : "none" }}>{"\u25BC"} SELL CE</button>
+        <div className="grid grid-cols-2 gap-3 p-3">
+          <div className="flex flex-col gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-center py-1 rounded" style={{ color: "var(--t-gn)", background: "rgba(16,185,129,.06)" }}>{"\u25B2"} BUY</span>
+            <button data-testid="button-buy-ce-mobile" disabled={!selectedStrike?.ce_ts} onClick={() => fire("B", "CE")} className="py-5 rounded-xl font-mono text-base font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.96] transition-transform" style={{ background: "linear-gradient(135deg, #10b981 0%, #059669 100%)", boxShadow: selectedStrike?.ce_ts ? "0 3px 12px rgba(16,185,129,.35)" : "none" }}>BUY CE</button>
+            <button data-testid="button-buy-pe-mobile" disabled={!selectedStrike?.pe_ts} onClick={() => fire("B", "PE")} className="py-5 rounded-xl font-mono text-base font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.96] transition-transform" style={{ background: "linear-gradient(135deg, #10b981 0%, #059669 100%)", boxShadow: selectedStrike?.pe_ts ? "0 3px 12px rgba(16,185,129,.35)" : "none" }}>BUY PE</button>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-center" style={{ color: "var(--t-rd)" }}>PUT (PE)</span>
-            <button data-testid="button-buy-pe-mobile" disabled={!selectedStrike?.pe_ts} onClick={() => fire("B", "PE")} className="py-3 rounded-lg font-mono text-sm font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.97] transition-transform" style={{ background: "linear-gradient(135deg, #10b981 0%, #059669 100%)", boxShadow: selectedStrike?.pe_ts ? "0 2px 8px rgba(16,185,129,.3)" : "none" }}>{"\u25B2"} BUY PE</button>
-            <button data-testid="button-sell-pe-mobile" disabled={!selectedStrike?.pe_ts} onClick={() => fire("S", "PE")} className="py-3 rounded-lg font-mono text-sm font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.97] transition-transform" style={{ background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)", boxShadow: selectedStrike?.pe_ts ? "0 2px 8px rgba(239,68,68,.3)" : "none" }}>{"\u25BC"} SELL PE</button>
+          <div className="flex flex-col gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-center py-1 rounded" style={{ color: "var(--t-rd)", background: "rgba(239,68,68,.06)" }}>{"\u25BC"} SELL</span>
+            <button data-testid="button-sell-ce-mobile" disabled={!selectedStrike?.ce_ts} onClick={() => fire("S", "CE")} className="py-5 rounded-xl font-mono text-base font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.96] transition-transform" style={{ background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)", boxShadow: selectedStrike?.ce_ts ? "0 3px 12px rgba(239,68,68,.35)" : "none" }}>SELL CE</button>
+            <button data-testid="button-sell-pe-mobile" disabled={!selectedStrike?.pe_ts} onClick={() => fire("S", "PE")} className="py-5 rounded-xl font-mono text-base font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.96] transition-transform" style={{ background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)", boxShadow: selectedStrike?.pe_ts ? "0 3px 12px rgba(239,68,68,.35)" : "none" }}>SELL PE</button>
           </div>
         </div>
       </div>
