@@ -48,6 +48,7 @@ export default function Terminal() {
   const [spotPrice, setSpotPrice] = useState(0);
   const [chain, setChain] = useState<ChainRow[]>([]);
   const [chainLoading, setChainLoading] = useState(false);
+  const [showChain, setShowChain] = useState(false);
   const [selectedStrike, setSelectedStrike] = useState<ChainRow | null>(null);
   const [selectedIdx, setSelectedIdx] = useState(-1);
   const [lots, setLots] = useState(1);
@@ -461,8 +462,12 @@ export default function Terminal() {
     return (
       <div className="fixed inset-0 flex items-center justify-center" style={{ background: "var(--t-bg)" }} data-testid="login-overlay">
         <div className="w-[400px] p-9 rounded-2xl text-center animate-fade-in" style={{ background: "var(--t-sf)", border: "1px solid var(--t-bd)", boxShadow: "0 4px 12px rgba(0,0,0,.4)" }}>
-          <div className="text-5xl mb-4">&#x26A1;</div>
-          <h1 className="text-xl font-bold mb-1" style={{ color: "var(--t-tx)" }}>{isRegister ? "Create Account" : "Welcome Back"}</h1>
+          <div className="text-5xl mb-2">&#x26A1;</div>
+          <div className="mb-1">
+            <span className="font-mono text-lg font-bold" style={{ color: "var(--t-bl)", letterSpacing: "-0.5px" }}>AKATSUKI</span>
+            <span className="text-xs font-semibold ml-1.5" style={{ color: "var(--t-rd)" }}>SCALPER</span>
+          </div>
+          <h1 className="text-lg font-bold mb-0.5" style={{ color: "var(--t-tx)" }}>{isRegister ? "Create Account" : "Welcome Back"}</h1>
           <p className="text-xs mb-6" style={{ color: "var(--t-tx3)" }}>{isRegister ? "Sign up to start trading" : "Sign in to your trading account"}</p>
 
           <input
@@ -593,8 +598,8 @@ export default function Terminal() {
       >
         <div className="flex items-center gap-2.5">
           <span className="text-xl">&#x26A1;</span>
-          <span className="font-mono text-[15px] font-bold" style={{ color: "var(--t-bl)", letterSpacing: "-0.5px" }}>SCALPER</span>
-          <span className="text-[9px] px-1.5 py-0.5 rounded-xl font-semibold" style={{ background: "rgba(59,130,246,.1)", color: "var(--t-bl)", border: "1px solid rgba(59,130,246,.2)" }}>v2</span>
+          <span className="font-mono text-[15px] font-bold" style={{ color: "var(--t-bl)", letterSpacing: "-0.5px" }}>AKATSUKI</span>
+          <span className="text-[10px] font-semibold" style={{ color: "var(--t-rd)", letterSpacing: "0.5px" }}>SCALPER</span>
         </div>
         <div className="flex items-center gap-3.5">
           <span className="font-mono text-[11px]" style={{ color: "var(--t-tx3)" }} data-testid="text-clock">{clock}</span>
@@ -645,7 +650,8 @@ export default function Terminal() {
             <option value="15">&plusmn;15</option>
           </select>
         </CtrlGroup>
-        <button data-testid="button-refresh-chain" onClick={loadChain} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[11px] font-medium transition-all" style={{ background: "var(--t-sf2)", color: "var(--t-tx2)", border: "1px solid var(--t-bd)" }}>&#x21BB; Refresh</button>
+        <button data-testid="button-toggle-chain" onClick={() => setShowChain(!showChain)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[11px] font-medium transition-all" style={showChain ? { background: "rgba(59,130,246,.12)", color: "var(--t-bl)", border: "1px solid rgba(59,130,246,.25)" } : { background: "var(--t-sf2)", color: "var(--t-tx2)", border: "1px solid var(--t-bd)" }}>{showChain ? "\u25BC Hide Chain" : "\u25B6 Option Chain"}</button>
+        {showChain && <button data-testid="button-refresh-chain" onClick={loadChain} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[11px] font-medium transition-all" style={{ background: "var(--t-sf2)", color: "var(--t-tx2)", border: "1px solid var(--t-bd)" }}>&#x21BB;</button>}
         <div className="flex-1" />
         <div className="flex items-baseline gap-1.5">
           <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--t-tx3)" }}>Spot</span>
@@ -702,50 +708,52 @@ export default function Terminal() {
       </div>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto overflow-x-hidden">
-          <table className="w-full border-collapse">
-            <thead className="sticky top-0 z-10">
-              <tr>
-                <th className="py-2 px-1.5 text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap" style={{ background: "var(--t-sf)", borderBottom: "2px solid var(--t-bd)", color: "var(--t-gn)" }}>CE Symbol</th>
-                <th className="py-2 px-1.5 text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap" style={{ background: "var(--t-sf)", borderBottom: "2px solid var(--t-bd)", color: "var(--t-gn)" }}>CE Lot</th>
-                <th className="py-2 px-1.5 text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap" style={{ background: "var(--t-sf)", borderBottom: "2px solid var(--t-bd)", color: "var(--t-yw)" }}>Strike</th>
-                <th className="py-2 px-1.5 text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap" style={{ background: "var(--t-sf)", borderBottom: "2px solid var(--t-bd)", color: "var(--t-rd)" }}>PE Lot</th>
-                <th className="py-2 px-1.5 text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap" style={{ background: "var(--t-sf)", borderBottom: "2px solid var(--t-bd)", color: "var(--t-rd)" }}>PE Symbol</th>
-              </tr>
-            </thead>
-            <tbody>
-              {chainLoading ? (
-                <tr><td colSpan={5} className="py-8 text-center"><div className="inline-block w-5 h-5 rounded-full animate-spin-slow" style={{ border: "2px solid var(--t-bd)", borderTopColor: "var(--t-bl)" }} /></td></tr>
-              ) : chain.length === 0 ? (
-                <tr><td colSpan={5} className="py-10 text-center text-[11px]" style={{ color: "var(--t-tx3)" }}>{expiries.length === 0 ? "Loading instruments..." : "No data available"}</td></tr>
-              ) : chain.map((row, i) => (
-                <tr
-                  key={row.strike}
-                  data-testid={`row-strike-${row.strike}`}
-                  onClick={() => pickStrike(i)}
-                  className="cursor-pointer transition-colors"
-                  style={{
-                    background: selectedIdx === i ? "rgba(245,158,11,.12)" : row.is_atm ? "rgba(59,130,246,.08)" : "transparent",
-                    borderBottom: "1px solid rgba(36,48,73,.5)",
-                    ...(selectedIdx === i ? { boxShadow: "inset 3px 0 0 var(--t-yw)" } : {}),
-                    ...(row.is_atm ? { borderTop: "1px solid rgba(59,130,246,.2)", borderBottom: "1px solid rgba(59,130,246,.2)" } : {}),
-                  }}
-                >
-                  <td className="py-1.5 px-1.5 text-center font-mono text-[10px] max-w-[140px] overflow-hidden text-ellipsis whitespace-nowrap" style={{ color: "var(--t-tx3)" }}>{row.ce_ts || "\u2014"}</td>
-                  <td className="py-1.5 px-1.5 text-center text-[10px]" style={{ color: "var(--t-tx3)" }}>{row.ce_ts ? row.ce_lot : "\u2014"}</td>
-                  <td className="py-1.5 px-1.5 text-center font-mono font-bold text-sm" style={{ color: "var(--t-yw)" }}>
-                    {fmtStrike(row.strike)}
-                    {row.is_atm && <span className="inline-block text-[8px] px-1.5 py-px ml-1 rounded font-bold align-middle tracking-wider" style={{ background: "rgba(59,130,246,.2)", color: "var(--t-bl)" }}>ATM</span>}
-                  </td>
-                  <td className="py-1.5 px-1.5 text-center text-[10px]" style={{ color: "var(--t-tx3)" }}>{row.pe_ts ? row.pe_lot : "\u2014"}</td>
-                  <td className="py-1.5 px-1.5 text-center font-mono text-[10px] max-w-[140px] overflow-hidden text-ellipsis whitespace-nowrap" style={{ color: "var(--t-tx3)" }}>{row.pe_ts || "\u2014"}</td>
+        {showChain && (
+          <div className="overflow-y-auto overflow-x-hidden shrink-0" style={{ maxHeight: "40vh", borderBottom: "1px solid var(--t-bd)" }}>
+            <table className="w-full border-collapse">
+              <thead className="sticky top-0 z-10">
+                <tr>
+                  <th className="py-2 px-1.5 text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap" style={{ background: "var(--t-sf)", borderBottom: "2px solid var(--t-bd)", color: "var(--t-gn)" }}>CE Symbol</th>
+                  <th className="py-2 px-1.5 text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap" style={{ background: "var(--t-sf)", borderBottom: "2px solid var(--t-bd)", color: "var(--t-gn)" }}>CE Lot</th>
+                  <th className="py-2 px-1.5 text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap" style={{ background: "var(--t-sf)", borderBottom: "2px solid var(--t-bd)", color: "var(--t-yw)" }}>Strike</th>
+                  <th className="py-2 px-1.5 text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap" style={{ background: "var(--t-sf)", borderBottom: "2px solid var(--t-bd)", color: "var(--t-rd)" }}>PE Lot</th>
+                  <th className="py-2 px-1.5 text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap" style={{ background: "var(--t-sf)", borderBottom: "2px solid var(--t-bd)", color: "var(--t-rd)" }}>PE Symbol</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {chainLoading ? (
+                  <tr><td colSpan={5} className="py-8 text-center"><div className="inline-block w-5 h-5 rounded-full animate-spin-slow" style={{ border: "2px solid var(--t-bd)", borderTopColor: "var(--t-bl)" }} /></td></tr>
+                ) : chain.length === 0 ? (
+                  <tr><td colSpan={5} className="py-10 text-center text-[11px]" style={{ color: "var(--t-tx3)" }}>{expiries.length === 0 ? "Loading instruments..." : "No data available"}</td></tr>
+                ) : chain.map((row, i) => (
+                  <tr
+                    key={row.strike}
+                    data-testid={`row-strike-${row.strike}`}
+                    onClick={() => pickStrike(i)}
+                    className="cursor-pointer transition-colors"
+                    style={{
+                      background: selectedIdx === i ? "rgba(245,158,11,.12)" : row.is_atm ? "rgba(59,130,246,.08)" : "transparent",
+                      borderBottom: "1px solid rgba(36,48,73,.5)",
+                      ...(selectedIdx === i ? { boxShadow: "inset 3px 0 0 var(--t-yw)" } : {}),
+                      ...(row.is_atm ? { borderTop: "1px solid rgba(59,130,246,.2)", borderBottom: "1px solid rgba(59,130,246,.2)" } : {}),
+                    }}
+                  >
+                    <td className="py-1.5 px-1.5 text-center font-mono text-[10px] max-w-[140px] overflow-hidden text-ellipsis whitespace-nowrap" style={{ color: "var(--t-tx3)" }}>{row.ce_ts || "\u2014"}</td>
+                    <td className="py-1.5 px-1.5 text-center text-[10px]" style={{ color: "var(--t-tx3)" }}>{row.ce_ts ? row.ce_lot : "\u2014"}</td>
+                    <td className="py-1.5 px-1.5 text-center font-mono font-bold text-sm" style={{ color: "var(--t-yw)" }}>
+                      {fmtStrike(row.strike)}
+                      {row.is_atm && <span className="inline-block text-[8px] px-1.5 py-px ml-1 rounded font-bold align-middle tracking-wider" style={{ background: "rgba(59,130,246,.2)", color: "var(--t-bl)" }}>ATM</span>}
+                    </td>
+                    <td className="py-1.5 px-1.5 text-center text-[10px]" style={{ color: "var(--t-tx3)" }}>{row.pe_ts ? row.pe_lot : "\u2014"}</td>
+                    <td className="py-1.5 px-1.5 text-center font-mono text-[10px] max-w-[140px] overflow-hidden text-ellipsis whitespace-nowrap" style={{ color: "var(--t-tx3)" }}>{row.pe_ts || "\u2014"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-        <div className="grid grid-cols-2 shrink-0" style={{ borderTop: "1px solid var(--t-bd)", maxHeight: "320px" }}>
+        <div className="grid grid-cols-2 flex-1 min-h-0" style={{ borderTop: showChain ? "none" : "1px solid var(--t-bd)" }}>
           <div className="flex flex-col overflow-hidden" style={{ borderRight: "1px solid var(--t-bd)" }}>
             <div className="flex items-center justify-between px-3 py-2 shrink-0" style={{ background: "var(--t-sf)", borderBottom: "1px solid var(--t-bd)" }}>
               <div className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: "var(--t-tx2)" }}>
@@ -893,6 +901,12 @@ export default function Terminal() {
           </div>
         </div>
       </div>
+
+      <footer className="flex items-center justify-center flex-wrap gap-x-4 gap-y-0.5 px-4 py-1.5 shrink-0" style={{ background: "var(--t-bg2)", borderTop: "1px solid var(--t-bd)" }}>
+        <span className="text-[10px] font-medium" style={{ color: "var(--t-tx3)" }}>Copyright &copy; Akatsuki</span>
+        <span className="w-px h-3" style={{ background: "var(--t-bd)" }} />
+        <span className="text-[10px]" style={{ color: "var(--t-tx3)" }}>Crafted by <span className="font-semibold" style={{ color: "var(--t-tx2)" }}>Dr. Arvind Dahiya</span> &amp; <span className="font-semibold" style={{ color: "var(--t-tx2)" }}>HC</span></span>
+      </footer>
 
       <ToastContainer toasts={toasts} />
     </div>
