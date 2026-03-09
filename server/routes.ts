@@ -121,6 +121,71 @@ export async function registerRoutes(
     res.json(result);
   });
 
+  app.post("/api/order/fast", (req, res) => {
+    if (!kotak.sessionState.loggedIn) return res.status(401).json({ error: "Not logged in" });
+    const { jData, action } = req.body;
+    if (!jData) return res.status(400).json({ error: "Missing jData" });
+
+    const sentAt = Date.now();
+    res.json({ status: "sent", ts: sentAt });
+
+    (async () => {
+      try {
+        const t0 = Date.now();
+        const result = await fetch(`${kotak.sessionState.baseUrl}/quick/order/rule/ms/place`, {
+          method: "POST",
+          headers: {
+            "accept": "application/json",
+            "Auth": kotak.sessionState.sessionToken!,
+            "Sid": kotak.sessionState.sessionSid!,
+            "neo-fin-key": "neotradeapi",
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: `jData=${jData}`,
+        });
+        const data = await result.json() as any;
+        const elapsed = Date.now() - t0;
+        log(`FAST ORDER ${elapsed}ms: ${JSON.stringify(data)}`, "order");
+
+        if (data.stat === "Not_Ok" && ((data.errMsg || "") + (data.emsg || "")).includes("LTP")) {
+          log(`MKT rejected, retrying limit...`, "order");
+          try {
+            const parsed = JSON.parse(jData);
+            const seg = parsed.es;
+            const ts = parsed.ts;
+            const tt = parsed.tt;
+            const qty = parsed.qt;
+            const q = await kotak.fetchQuote(seg, ts, "ltp");
+            const ltp = parseFloat(q?.ltp || "0");
+            if (ltp > 0) {
+              const pr = (ltp * (tt === "B" ? 1.002 : 0.998)).toFixed(2);
+              const limitData = JSON.stringify({ ...parsed, pt: "L", pr });
+              const r2 = await fetch(`${kotak.sessionState.baseUrl}/quick/order/rule/ms/place`, {
+                method: "POST",
+                headers: {
+                  "accept": "application/json",
+                  "Auth": kotak.sessionState.sessionToken!,
+                  "Sid": kotak.sessionState.sessionSid!,
+                  "neo-fin-key": "neotradeapi",
+                  "Content-Type": "application/x-www-form-urlencoded",
+                },
+                body: `jData=${limitData}`,
+              });
+              const d2 = await r2.json() as any;
+              broadcast({ type: "order_result", data: d2, action: action || "", elapsed });
+              return;
+            }
+          } catch {}
+        }
+
+        broadcast({ type: "order_result", data, action: action || "", elapsed });
+      } catch (e: any) {
+        log(`FAST ORDER error: ${e.message}`, "order");
+        broadcast({ type: "order_result", data: { stat: "Not_Ok", emsg: e.message }, action: action || "", elapsed: -1 });
+      }
+    })();
+  });
+
   app.post("/api/order/quick", async (req, res) => {
     if (!kotak.sessionState.loggedIn) return res.status(401).json({ error: "Not logged in" });
     const { tt, ts, es, lot, symbol } = req.body;

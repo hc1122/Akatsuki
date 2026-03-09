@@ -17,13 +17,20 @@ Professional options scalping terminal for Kotak Securities NEO API. Dark termin
 - `client/src/pages/terminal.tsx` - Main terminal page with all trading UI
 - `client/src/index.css` - Dark terminal theme with CSS variables (--t-* prefix)
 
+## Speed Optimizations
+- **Pre-computed order payloads**: All 4 order payloads (BUY/SELL CE/PE) are pre-built in refs when strike/lots change. Zero computation on keypress.
+- **Fire-and-forget**: `/api/order/fast` returns immediately ("sent") and fires Kotak order in background. Result delivered via WebSocket with timing info.
+- **Refs for hot path**: `strikeRef`, `lotsRef`, `precomputedRef` avoid React re-render overhead on the order dispatch path.
+- **Toast shows execution time**: Order result toast includes Kotak API round-trip time in ms.
+
 ## API Endpoints
 - `POST /api/login` - TOTP + MPIN login
 - `GET /api/session` - Check login status
 - `GET /api/spot/:idx` - Get spot price (NIFTY/BANKNIFTY/SENSEX)
 - `GET /api/expiries/:idx` - Get expiry list
 - `GET /api/option-chain/:idx` - Get option chain data
-- `POST /api/order/quick` - Place order (BUY/SELL CE/PE)
+- `POST /api/order/fast` - Fire-and-forget order (pre-built jData, instant response, result via WebSocket)
+- `POST /api/order/quick` - Place order synchronously (fallback)
 - `POST /api/order/cancel` - Cancel order
 - `GET /api/orderbook` - Get order book
 - `GET /api/positions` - Get positions

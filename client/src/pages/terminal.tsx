@@ -103,7 +103,17 @@ export default function Terminal() {
     ws.onmessage = (e) => {
       try {
         const m = JSON.parse(e.data);
-        if (m.type === "order_update" || m.type === "order_cancelled") {
+        if (m.type === "order_result") {
+          const d = m.data;
+          const ms = m.elapsed >= 0 ? ` (${m.elapsed}ms)` : "";
+          if (d.stat === "Ok" || d.nOrdNo) {
+            addToast(`${m.action || "Order"} #${d.nOrdNo || ""}${ms}`, "success");
+          } else {
+            addToast(`${m.action || "Order"} failed: ${d.emsg || d.errMsg || ""}${ms}`, "error");
+          }
+          loadOrders();
+          loadPositions();
+        } else if (m.type === "order_update" || m.type === "order_cancelled") {
           const d = m.data;
           if (d.stat === "Ok" || d.nOrdNo) {
             addToast(`${m.action || "Order"} #${d.nOrdNo || ""}`, "success");
@@ -268,34 +278,51 @@ export default function Terminal() {
     addToast("Logged out successfully", "info");
   };
 
-  const fire = useCallback(async (tt: string, ot: string) => {
-    if (!selectedStrike) { addToast("Select a strike first", "error"); return; }
-    const prefix = ot.toLowerCase();
-    const ts = (selectedStrike as any)[`${prefix}_ts`];
-    const es = (selectedStrike as any)[`${prefix}_seg`];
-    const lotSize = (selectedStrike as any)[`${prefix}_lot`] || 1;
-    const sym = (selectedStrike as any)[`${prefix}_symbol`] || "";
-    const qty = lotSize * lots;
-    if (!ts) { addToast("No symbol available", "error"); return; }
+  const precomputedRef = useRef<Record<string, string>>({});
+  const strikeRef = useRef<ChainRow | null>(null);
+  const lotsRef = useRef(1);
 
-    const action = `${tt === "B" ? "BUY" : "SELL"} ${ot}`;
-    addToast(`${action} ${selectedStrike.strike} - ${lots} lot(s)...`, "info");
+  useEffect(() => { strikeRef.current = selectedStrike; }, [selectedStrike]);
+  useEffect(() => { lotsRef.current = lots; }, [lots]);
 
-    try {
-      const r = await (await fetch("/api/order/quick", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tt, ts, es, lot: qty, symbol: sym }),
-      })).json();
-      if (r.stat === "Ok" || r.nOrdNo) {
-        addToast(`${action} ${selectedStrike.strike} placed #${r.nOrdNo}`, "success");
-      } else {
-        addToast(`${action} failed: ${r.emsg || r.errMsg || "Unknown error"}`, "error");
+  useEffect(() => {
+    if (!selectedStrike) { precomputedRef.current = {}; return; }
+    const builds: Record<string, string> = {};
+    for (const ot of ["CE", "PE"]) {
+      const p = ot.toLowerCase();
+      const ts = (selectedStrike as any)[`${p}_ts`];
+      const es = (selectedStrike as any)[`${p}_seg`];
+      const lotSize = (selectedStrike as any)[`${p}_lot`] || 1;
+      if (!ts) continue;
+      for (const tt of ["B", "S"]) {
+        const qty = lotSize * lots;
+        const jData = JSON.stringify({
+          am: "NO", dq: "0", es, mp: "0", pc: "MIS", pf: "N",
+          pr: "0", pt: "MKT", qt: String(qty), rt: "DAY", tp: "0", ts, tt,
+        });
+        builds[`${tt}_${ot}`] = jData;
       }
-      loadOrders();
-      loadPositions();
-    } catch { addToast("Network error", "error"); }
-  }, [selectedStrike, lots, addToast, loadOrders, loadPositions]);
+    }
+    precomputedRef.current = builds;
+  }, [selectedStrike, lots]);
+
+  const fire = useCallback((tt: string, ot: string) => {
+    const strike = strikeRef.current;
+    if (!strike) { addToast("Select a strike first", "error"); return; }
+
+    const key = `${tt}_${ot}`;
+    const jData = precomputedRef.current[key];
+    if (!jData) { addToast("No symbol available", "error"); return; }
+
+    const action = `${tt === "B" ? "BUY" : "SELL"} ${ot} ${strike.strike}`;
+    addToast(`${action} x${lotsRef.current} sent`, "info");
+
+    fetch("/api/order/fast", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jData, action }),
+    }).catch(() => addToast("Network error", "error"));
+  }, [addToast]);
 
   useEffect(() => {
     if (!loggedIn) return;
