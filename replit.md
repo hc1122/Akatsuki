@@ -1,4 +1,4 @@
-# Kotak Scalper Terminal
+# Akatsuki - Options Scalping Terminal
 
 ## Overview
 Multi-user options scalping terminal for Kotak Securities NEO API. Dark terminal UI with real-time option chain display, one-click order placement, position tracking, and WebSocket-based updates. Supports multiple traders with independent Kotak sessions.
@@ -68,9 +68,16 @@ Multi-user options scalping terminal for Kotak Securities NEO API. Dark terminal
 - `9` or `Numpad9` - SELL PE
 
 ## Design
+- Branded as "AKATSUKI" with copyright footer (Dr. Arvind Dahiya & HC)
 - Dark terminal aesthetic (#06080d background)
 - JetBrains Mono for prices/numbers
 - Green (#10b981) for buy/profit, Red (#ef4444) for sell/loss
 - Blue (#3b82f6) for accents, Yellow (#f59e0b) for strike prices
 - WebSocket real-time updates with status indicator
 - Multi-step auth screens with same dark aesthetic
+
+## Responsive Layout
+- **Desktop (md+)**: Full action bar with CE/PE buttons flanking center strike info + lots control, keyboard shortcut hints visible, positions/orders side-by-side when both toggled open
+- **Mobile (<md)**: Compact header (clock/username hidden), P&L strip always visible above buttons, 2-column grid with large touch-friendly BUY/SELL buttons (CE left, PE right), active:scale press feedback
+- Option Chain, Positions, Orders all behind toggle buttons in the controls bar (collapsed by default)
+- Auth screens (login, credentials, TOTP) use max-width with responsive padding

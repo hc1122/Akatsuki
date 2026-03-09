@@ -49,6 +49,8 @@ export default function Terminal() {
   const [chain, setChain] = useState<ChainRow[]>([]);
   const [chainLoading, setChainLoading] = useState(false);
   const [showChain, setShowChain] = useState(false);
+  const [showPositions, setShowPositions] = useState(false);
+  const [showOrders, setShowOrders] = useState(false);
   const [selectedStrike, setSelectedStrike] = useState<ChainRow | null>(null);
   const [selectedIdx, setSelectedIdx] = useState(-1);
   const [lots, setLots] = useState(1);
@@ -461,7 +463,7 @@ export default function Terminal() {
   if (authStep === "login") {
     return (
       <div className="fixed inset-0 flex items-center justify-center" style={{ background: "var(--t-bg)" }} data-testid="login-overlay">
-        <div className="w-[400px] p-9 rounded-2xl text-center animate-fade-in" style={{ background: "var(--t-sf)", border: "1px solid var(--t-bd)", boxShadow: "0 4px 12px rgba(0,0,0,.4)" }}>
+        <div className="w-full max-w-[400px] mx-4 p-6 md:p-9 rounded-2xl text-center animate-fade-in" style={{ background: "var(--t-sf)", border: "1px solid var(--t-bd)", boxShadow: "0 4px 12px rgba(0,0,0,.4)" }}>
           <div className="text-5xl mb-2">&#x26A1;</div>
           <div className="mb-1">
             <span className="font-mono text-lg font-bold" style={{ color: "var(--t-bl)", letterSpacing: "-0.5px" }}>AKATSUKI</span>
@@ -516,7 +518,7 @@ export default function Terminal() {
   if (authStep === "credentials") {
     return (
       <div className="fixed inset-0 flex items-center justify-center" style={{ background: "var(--t-bg)" }} data-testid="credentials-overlay">
-        <div className="w-[440px] p-9 rounded-2xl text-center animate-fade-in" style={{ background: "var(--t-sf)", border: "1px solid var(--t-bd)", boxShadow: "0 4px 12px rgba(0,0,0,.4)" }}>
+        <div className="w-full max-w-[440px] mx-4 p-6 md:p-9 rounded-2xl text-center animate-fade-in" style={{ background: "var(--t-sf)", border: "1px solid var(--t-bd)", boxShadow: "0 4px 12px rgba(0,0,0,.4)" }}>
           <div className="text-5xl mb-4">&#x1F511;</div>
           <h1 className="text-xl font-bold mb-1" style={{ color: "var(--t-tx)" }}>Kotak Credentials</h1>
           <p className="text-xs mb-6" style={{ color: "var(--t-tx3)" }}>Enter your Kotak Securities API credentials. These are saved securely and only need to be entered once.</p>
@@ -544,7 +546,7 @@ export default function Terminal() {
   if (authStep === "totp") {
     return (
       <div className="fixed inset-0 flex items-center justify-center" style={{ background: "var(--t-bg)" }} data-testid="totp-overlay">
-        <div className="w-[380px] p-9 rounded-2xl text-center animate-fade-in" style={{ background: "var(--t-sf)", border: "1px solid var(--t-bd)", boxShadow: "0 4px 12px rgba(0,0,0,.4)" }}>
+        <div className="w-full max-w-[380px] mx-4 p-6 md:p-9 rounded-2xl text-center animate-fade-in" style={{ background: "var(--t-sf)", border: "1px solid var(--t-bd)", boxShadow: "0 4px 12px rgba(0,0,0,.4)" }}>
           <div className="text-5xl mb-4">&#x1F510;</div>
           <h1 className="text-xl font-bold mb-1" style={{ color: "var(--t-tx)" }}>Enter TOTP</h1>
           <p className="text-xs mb-1" style={{ color: "var(--t-bl)" }}>{authEmail}</p>
@@ -592,42 +594,42 @@ export default function Terminal() {
   return (
     <div className="flex flex-col h-screen" style={{ background: "var(--t-bg)" }}>
       <header
-        className="flex items-center justify-between px-5 h-12 sticky top-0 z-50 shrink-0"
+        className="flex items-center justify-between px-3 md:px-5 h-11 md:h-12 sticky top-0 z-50 shrink-0"
         style={{ background: "linear-gradient(180deg, var(--t-sf) 0%, var(--t-bg2) 100%)", borderBottom: "1px solid var(--t-bd)" }}
       >
-        <div className="flex items-center gap-2.5">
-          <span className="text-xl">&#x26A1;</span>
-          <span className="font-mono text-[15px] font-bold" style={{ color: "var(--t-bl)", letterSpacing: "-0.5px" }}>AKATSUKI</span>
+        <div className="flex items-center gap-2">
+          <span className="text-lg md:text-xl">{"\u26A1"}</span>
+          <span className="font-mono text-[13px] md:text-[15px] font-bold" style={{ color: "var(--t-bl)", letterSpacing: "-0.5px" }}>AKATSUKI</span>
         </div>
-        <div className="flex items-center gap-3.5">
-          <span className="font-mono text-[11px]" style={{ color: "var(--t-tx3)" }} data-testid="text-clock">{clock}</span>
-          <span className="text-[11px] font-medium" style={{ color: "var(--t-tx2)" }} data-testid="text-username">{greeting || authEmail}</span>
+        <div className="flex items-center gap-2 md:gap-3.5">
+          <span className="font-mono text-[10px] md:text-[11px] hidden sm:inline" style={{ color: "var(--t-tx3)" }} data-testid="text-clock">{clock}</span>
+          <span className="text-[10px] md:text-[11px] font-medium hidden sm:inline" style={{ color: "var(--t-tx2)" }} data-testid="text-username">{greeting || authEmail}</span>
           <div
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
+            className="flex items-center gap-1 px-2 py-0.5 md:px-2.5 md:py-1 rounded-full text-[10px] md:text-[11px] font-medium"
             style={wsConnected ? { background: "rgba(16,185,129,.08)", color: "var(--t-gn)" } : { background: "rgba(239,68,68,.08)", color: "var(--t-rd)" }}
             data-testid="status-pill"
           >
             <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? "animate-pulse-dot" : ""}`} style={{ background: wsConnected ? "var(--t-gn)" : "var(--t-rd)" }} />
-            <span>{wsConnected ? "Live" : "Offline"}</span>
+            <span className="hidden sm:inline">{wsConnected ? "Live" : "Offline"}</span>
           </div>
           <button
             data-testid="button-logout"
             onClick={doLogout}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all"
+            className="flex items-center gap-1 px-2 py-1 md:px-3 md:py-1.5 rounded-md text-[10px] md:text-[11px] font-semibold transition-all"
             style={{ background: "rgba(239,68,68,.08)", color: "var(--t-rd)", border: "1px solid rgba(239,68,68,.15)" }}
-          >&#x23FB; Logout</button>
+          >{"\u23FB"} <span className="hidden sm:inline">Logout</span></button>
         </div>
       </header>
 
-      <div className="flex items-center gap-0.5 px-4 h-8 text-[11px] shrink-0" style={{ background: "var(--t-bg2)", borderBottom: "1px solid var(--t-bd)" }}>
-        <FundItem label="Available" value={funds.available} />
-        <div className="w-px h-4 mx-3" style={{ background: "var(--t-bd)" }} />
+      <div className="flex items-center gap-0.5 px-2 md:px-4 h-7 md:h-8 text-[10px] md:text-[11px] shrink-0 overflow-x-auto" style={{ background: "var(--t-bg2)", borderBottom: "1px solid var(--t-bd)" }}>
+        <FundItem label="Avl" value={funds.available} />
+        <div className="w-px h-4 mx-1.5 md:mx-3 shrink-0" style={{ background: "var(--t-bd)" }} />
         <FundItem label="Used" value={funds.used} />
-        <div className="w-px h-4 mx-3" style={{ background: "var(--t-bd)" }} />
-        <FundItem label="Collateral" value={funds.collateral} />
+        <div className="w-px h-4 mx-1.5 md:mx-3 shrink-0" style={{ background: "var(--t-bd)" }} />
+        <FundItem label="Col" value={funds.collateral} />
       </div>
 
-      <div className="flex items-center gap-2 px-4 py-2 shrink-0 flex-wrap" style={{ background: "var(--t-sf)", borderBottom: "1px solid var(--t-bd)" }}>
+      <div className="flex items-center gap-1.5 md:gap-2 px-2 md:px-4 py-1.5 md:py-2 shrink-0 flex-wrap" style={{ background: "var(--t-sf)", borderBottom: "1px solid var(--t-bd)" }}>
         <CtrlGroup label="Index">
           <select data-testid="select-index" value={currentIndex} onChange={e => switchIndex(e.target.value)} className="ctrl-select">
             <option value="NIFTY">NIFTY 50</option>
@@ -649,7 +651,9 @@ export default function Terminal() {
           </select>
         </CtrlGroup>
         <button data-testid="button-toggle-chain" onClick={() => setShowChain(!showChain)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[11px] font-medium transition-all" style={showChain ? { background: "rgba(59,130,246,.12)", color: "var(--t-bl)", border: "1px solid rgba(59,130,246,.25)" } : { background: "var(--t-sf2)", color: "var(--t-tx2)", border: "1px solid var(--t-bd)" }}>{showChain ? "\u25BC Hide Chain" : "\u25B6 Option Chain"}</button>
-        {showChain && <button data-testid="button-refresh-chain" onClick={loadChain} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[11px] font-medium transition-all" style={{ background: "var(--t-sf2)", color: "var(--t-tx2)", border: "1px solid var(--t-bd)" }}>&#x21BB;</button>}
+        {showChain && <button data-testid="button-refresh-chain" onClick={loadChain} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[11px] font-medium transition-all" style={{ background: "var(--t-sf2)", color: "var(--t-tx2)", border: "1px solid var(--t-bd)" }}>{"\u21BB"}</button>}
+        <button data-testid="button-toggle-positions" onClick={() => setShowPositions(!showPositions)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[11px] font-medium transition-all" style={showPositions ? { background: "rgba(16,185,129,.12)", color: "var(--t-gn)", border: "1px solid rgba(16,185,129,.25)" } : { background: "var(--t-sf2)", color: "var(--t-tx2)", border: "1px solid var(--t-bd)" }}>{showPositions ? "\u25BC Positions" : "\u25B6 Positions"}{positions.length > 0 && <span className="text-[9px] px-1 py-px rounded-lg font-semibold ml-0.5" style={{ background: "rgba(59,130,246,.1)", color: "var(--t-bl)" }}>{positions.length}</span>}</button>
+        <button data-testid="button-toggle-orders" onClick={() => setShowOrders(!showOrders)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[11px] font-medium transition-all" style={showOrders ? { background: "rgba(245,158,11,.12)", color: "var(--t-yw)", border: "1px solid rgba(245,158,11,.25)" } : { background: "var(--t-sf2)", color: "var(--t-tx2)", border: "1px solid var(--t-bd)" }}>{showOrders ? "\u25BC Orders" : "\u25B6 Orders"}{orders.length > 0 && <span className="text-[9px] px-1 py-px rounded-lg font-semibold ml-0.5" style={{ background: "rgba(59,130,246,.1)", color: "var(--t-bl)" }}>{orders.length}</span>}</button>
         <div className="flex-1" />
         <div className="flex items-baseline gap-1.5">
           <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--t-tx3)" }}>Spot</span>
@@ -657,7 +661,7 @@ export default function Terminal() {
         </div>
       </div>
 
-      <div className="flex items-center px-5 gap-0 shrink-0" style={{ background: "linear-gradient(180deg, var(--t-sf) 0%, var(--t-bg2) 100%)", borderBottom: "2px solid var(--t-bd)", minHeight: "70px" }}>
+      <div className="hidden md:flex items-center px-5 gap-0 shrink-0" style={{ background: "linear-gradient(180deg, var(--t-sf) 0%, var(--t-bg2) 100%)", borderBottom: "2px solid var(--t-bd)", minHeight: "70px" }}>
         <div className="flex items-center gap-3 shrink-0 pr-6 mr-5" style={{ borderRight: "1px solid var(--t-bd)" }}>
           <div className="flex flex-col items-center gap-1.5">
             <span className="text-[9px] font-bold tracking-wider uppercase px-2 py-0.5 rounded" style={{ background: "rgba(16,185,129,.08)", color: "var(--t-gn)", border: "1px solid rgba(16,185,129,.15)" }}>CALL</span>
@@ -667,8 +671,8 @@ export default function Terminal() {
             </div>
           </div>
           <div className="flex flex-col gap-1.5">
-            <ActionButton data-testid="button-buy-ce" variant="buy" disabled={!selectedStrike?.ce_ts} onClick={() => fire("B", "CE")}>&#x25B2; BUY CE</ActionButton>
-            <ActionButton data-testid="button-sell-ce" variant="sell" disabled={!selectedStrike?.ce_ts} onClick={() => fire("S", "CE")}>&#x25BC; SELL CE</ActionButton>
+            <ActionButton data-testid="button-buy-ce" variant="buy" disabled={!selectedStrike?.ce_ts} onClick={() => fire("B", "CE")}>{"\u25B2"} BUY CE</ActionButton>
+            <ActionButton data-testid="button-sell-ce" variant="sell" disabled={!selectedStrike?.ce_ts} onClick={() => fire("S", "CE")}>{"\u25BC"} SELL CE</ActionButton>
           </div>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center gap-2 px-5">
@@ -680,20 +684,20 @@ export default function Terminal() {
                 <span className="text-[10px] px-2 py-0.5 rounded" style={{ color: "var(--t-tx3)", background: "var(--t-sf2)" }}>PE: {selectedStrike.pe_ts || "N/A"}</span>
               </>
             ) : (
-              <span className="text-xs italic" style={{ color: "var(--t-tx3)" }}>Select a strike from the option chain below</span>
+              <span className="text-xs italic" style={{ color: "var(--t-tx3)" }}>Select a strike from the option chain</span>
             )}
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--t-tx3)" }}>LOTS</span>
-            <button data-testid="button-lot-minus" onClick={() => setLots(Math.max(1, lots - 1))} className="w-6 h-6 flex items-center justify-center rounded font-bold text-[15px] select-none transition-all" style={{ background: "var(--t-sf2)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }}>&minus;</button>
+            <button data-testid="button-lot-minus" onClick={() => setLots(Math.max(1, lots - 1))} className="w-6 h-6 flex items-center justify-center rounded font-bold text-[15px] select-none transition-all" style={{ background: "var(--t-sf2)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }}>{"\u2212"}</button>
             <input data-testid="input-lots" type="number" value={lots} onChange={e => setLots(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))} className="w-14 py-1 px-1.5 rounded text-center font-mono text-base font-bold outline-none" style={{ background: "var(--t-bg)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }} />
             <button data-testid="button-lot-plus" onClick={() => setLots(Math.min(50, lots + 1))} className="w-6 h-6 flex items-center justify-center rounded font-bold text-[15px] select-none transition-all" style={{ background: "var(--t-sf2)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }}>+</button>
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0 pl-6 ml-5" style={{ borderLeft: "1px solid var(--t-bd)" }}>
           <div className="flex flex-col gap-1.5">
-            <ActionButton data-testid="button-buy-pe" variant="buy" disabled={!selectedStrike?.pe_ts} onClick={() => fire("B", "PE")}>&#x25B2; BUY PE</ActionButton>
-            <ActionButton data-testid="button-sell-pe" variant="sell" disabled={!selectedStrike?.pe_ts} onClick={() => fire("S", "PE")}>&#x25BC; SELL PE</ActionButton>
+            <ActionButton data-testid="button-buy-pe" variant="buy" disabled={!selectedStrike?.pe_ts} onClick={() => fire("B", "PE")}>{"\u25B2"} BUY PE</ActionButton>
+            <ActionButton data-testid="button-sell-pe" variant="sell" disabled={!selectedStrike?.pe_ts} onClick={() => fire("S", "PE")}>{"\u25BC"} SELL PE</ActionButton>
           </div>
           <div className="flex flex-col items-center gap-1.5">
             <span className="text-[9px] font-bold tracking-wider uppercase px-2 py-0.5 rounded" style={{ background: "rgba(239,68,68,.08)", color: "var(--t-rd)", border: "1px solid rgba(239,68,68,.15)" }}>PUT</span>
@@ -701,6 +705,56 @@ export default function Terminal() {
               <kbd className="inline-block px-1 py-px rounded font-mono text-[9px]" style={{ background: "var(--t-sf3)", border: "1px solid var(--t-bd2)", color: "var(--t-tx2)" }}>7</kbd> buy<br />
               <kbd className="inline-block px-1 py-px rounded font-mono text-[9px]" style={{ background: "var(--t-sf3)", border: "1px solid var(--t-bd2)", color: "var(--t-tx2)" }}>9</kbd> sell
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex md:hidden flex-col shrink-0" style={{ background: "var(--t-sf)", borderBottom: "2px solid var(--t-bd)" }}>
+        <div className="flex items-center justify-between px-3 py-1.5" style={{ borderBottom: "1px solid var(--t-bd)" }}>
+          <div className="font-mono text-xs" data-testid="text-selected-strike-mobile">
+            {selectedStrike ? (
+              <span style={{ color: "var(--t-yw)" }}>{"\u25C9"} {fmtStrike(selectedStrike.strike)}</span>
+            ) : (
+              <span className="italic" style={{ color: "var(--t-tx3)" }}>No strike selected</span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] font-semibold uppercase" style={{ color: "var(--t-tx3)" }}>Lots</span>
+            <button onClick={() => setLots(Math.max(1, lots - 1))} className="w-7 h-7 flex items-center justify-center rounded font-bold text-sm" style={{ background: "var(--t-sf2)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }}>{"\u2212"}</button>
+            <input type="number" value={lots} onChange={e => setLots(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))} className="w-10 py-1 rounded text-center font-mono text-sm font-bold outline-none" style={{ background: "var(--t-bg)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }} />
+            <button onClick={() => setLots(Math.min(50, lots + 1))} className="w-7 h-7 flex items-center justify-center rounded font-bold text-sm" style={{ background: "var(--t-sf2)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }}>+</button>
+          </div>
+        </div>
+        <div className="flex items-center justify-center flex-wrap gap-x-3 gap-y-0.5 px-3 py-1" style={{ background: "var(--t-bg2)", borderBottom: "1px solid var(--t-bd)" }}>
+          <div className="flex items-center gap-1 text-[11px]">
+            <span className="uppercase tracking-wider" style={{ color: "var(--t-tx3)" }}>P&L</span>
+            <span className="font-mono font-bold text-sm" style={{ color: totalPnl > 0 ? "var(--t-gn)" : totalPnl < 0 ? "var(--t-rd)" : "var(--t-tx3)" }} data-testid="text-mobile-pnl">
+              {totalPnl >= 0 ? "+" : "-"}{"\u20B9"}{Math.abs(totalPnl).toFixed(2)}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 text-[10px]">
+            <span style={{ color: "var(--t-tx3)" }}>Open</span>
+            <span className="font-mono font-semibold" style={{ color: openPnl > 0 ? "var(--t-gn)" : openPnl < 0 ? "var(--t-rd)" : "var(--t-tx3)" }}>
+              {openPnl >= 0 ? "+" : ""}{"\u20B9"}{openPnl.toFixed(0)}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 text-[10px]">
+            <span style={{ color: "var(--t-tx3)" }}>Closed</span>
+            <span className="font-mono font-semibold" style={{ color: closedPnl > 0 ? "var(--t-gn)" : closedPnl < 0 ? "var(--t-rd)" : "var(--t-tx3)" }}>
+              {closedPnl >= 0 ? "+" : ""}{"\u20B9"}{closedPnl.toFixed(0)}
+            </span>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 p-2">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-center" style={{ color: "var(--t-gn)" }}>CALL (CE)</span>
+            <button data-testid="button-buy-ce-mobile" disabled={!selectedStrike?.ce_ts} onClick={() => fire("B", "CE")} className="py-3 rounded-lg font-mono text-sm font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.97] transition-transform" style={{ background: "linear-gradient(135deg, #10b981 0%, #059669 100%)", boxShadow: selectedStrike?.ce_ts ? "0 2px 8px rgba(16,185,129,.3)" : "none" }}>{"\u25B2"} BUY CE</button>
+            <button data-testid="button-sell-ce-mobile" disabled={!selectedStrike?.ce_ts} onClick={() => fire("S", "CE")} className="py-3 rounded-lg font-mono text-sm font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.97] transition-transform" style={{ background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)", boxShadow: selectedStrike?.ce_ts ? "0 2px 8px rgba(239,68,68,.3)" : "none" }}>{"\u25BC"} SELL CE</button>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-center" style={{ color: "var(--t-rd)" }}>PUT (PE)</span>
+            <button data-testid="button-buy-pe-mobile" disabled={!selectedStrike?.pe_ts} onClick={() => fire("B", "PE")} className="py-3 rounded-lg font-mono text-sm font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.97] transition-transform" style={{ background: "linear-gradient(135deg, #10b981 0%, #059669 100%)", boxShadow: selectedStrike?.pe_ts ? "0 2px 8px rgba(16,185,129,.3)" : "none" }}>{"\u25B2"} BUY PE</button>
+            <button data-testid="button-sell-pe-mobile" disabled={!selectedStrike?.pe_ts} onClick={() => fire("S", "PE")} className="py-3 rounded-lg font-mono text-sm font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.97] transition-transform" style={{ background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)", boxShadow: selectedStrike?.pe_ts ? "0 2px 8px rgba(239,68,68,.3)" : "none" }}>{"\u25BC"} SELL PE</button>
           </div>
         </div>
       </div>
@@ -751,16 +805,18 @@ export default function Terminal() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 flex-1 min-h-0" style={{ borderTop: showChain ? "none" : "1px solid var(--t-bd)" }}>
-          <div className="flex flex-col overflow-hidden" style={{ borderRight: "1px solid var(--t-bd)" }}>
+        <div className={`flex-1 min-h-0 ${showPositions || showOrders ? "" : "hidden"}`} style={{ borderTop: showChain ? "none" : "1px solid var(--t-bd)" }}>
+          <div className={`h-full grid ${showPositions && showOrders ? "md:grid-cols-2 grid-cols-1" : "grid-cols-1"}`}>
+          {showPositions && (
+          <div className="flex flex-col overflow-hidden" style={{ borderRight: showOrders ? "1px solid var(--t-bd)" : "none" }}>
             <div className="flex items-center justify-between px-3 py-2 shrink-0" style={{ background: "var(--t-sf)", borderBottom: "1px solid var(--t-bd)" }}>
               <div className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: "var(--t-tx2)" }}>
-                &#x1F4CA; Positions
+                {"\uD83D\uDCCA"} Positions
                 <span className="text-[9px] px-1.5 py-px rounded-lg font-semibold" style={{ background: "rgba(59,130,246,.1)", color: "var(--t-bl)" }} data-testid="text-pos-count">{positions.length}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <button data-testid="button-close-all" onClick={closeAllPositions} className="px-2.5 py-0.5 rounded text-[10px] font-bold transition-all" style={{ background: "rgba(239,68,68,.08)", color: "var(--t-rd)", border: "1px solid rgba(239,68,68,.15)" }}>&#x2715; Close All</button>
-                <button data-testid="button-refresh-positions" onClick={loadPositions} className="px-2 py-0.5 rounded text-[10px]" style={{ border: "1px solid var(--t-bd)", color: "var(--t-tx3)" }}>&#x21BB;</button>
+                <button data-testid="button-close-all" onClick={closeAllPositions} className="px-2.5 py-0.5 rounded text-[10px] font-bold transition-all" style={{ background: "rgba(239,68,68,.08)", color: "var(--t-rd)", border: "1px solid rgba(239,68,68,.15)" }}>{"\u2715"} Close All</button>
+                <button data-testid="button-refresh-positions" onClick={loadPositions} className="px-2 py-0.5 rounded text-[10px]" style={{ border: "1px solid var(--t-bd)", color: "var(--t-tx3)" }}>{"\u21BB"}</button>
               </div>
             </div>
             {positions.length > 0 && (
@@ -848,13 +904,15 @@ export default function Terminal() {
               )}
             </div>
           </div>
+          )}
 
+          {showOrders && (
           <div className="flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-3 py-2 shrink-0" style={{ background: "var(--t-sf)", borderBottom: "1px solid var(--t-bd)" }}>
               <div className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: "var(--t-tx2)" }}>
-                &#x1F4CB; Orders <span className="text-[9px] px-1.5 py-px rounded-lg font-semibold" style={{ background: "rgba(59,130,246,.1)", color: "var(--t-bl)" }} data-testid="text-ord-count">{orders.length}</span>
+                {"\uD83D\uDCCB"} Orders <span className="text-[9px] px-1.5 py-px rounded-lg font-semibold" style={{ background: "rgba(59,130,246,.1)", color: "var(--t-bl)" }} data-testid="text-ord-count">{orders.length}</span>
               </div>
-              <button data-testid="button-refresh-orders" onClick={loadOrders} className="px-2 py-0.5 rounded text-[10px]" style={{ border: "1px solid var(--t-bd)", color: "var(--t-tx3)" }}>&#x21BB;</button>
+              <button data-testid="button-refresh-orders" onClick={loadOrders} className="px-2 py-0.5 rounded text-[10px]" style={{ border: "1px solid var(--t-bd)", color: "var(--t-tx3)" }}>{"\u21BB"}</button>
             </div>
             <div className="flex-1 overflow-y-auto py-0.5">
               {orders.length === 0 ? (
@@ -890,12 +948,14 @@ export default function Terminal() {
                     <span className="font-mono text-[10px]" style={{ color: "var(--t-tx2)" }}>{o.qty}</span>
                     <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider whitespace-nowrap" style={{ background: sc.bg, color: sc.color }}>{o.ordSt}</span>
                     {stCls === "open" ? (
-                      <button onClick={(e) => { e.stopPropagation(); cancelOrd(o.nOrdNo); }} className="px-2 py-0.5 rounded text-[9px] font-semibold" style={{ background: "rgba(239,68,68,.08)", color: "var(--t-rd)", border: "1px solid rgba(239,68,68,.15)" }} data-testid={`button-cancel-order-${i}`}>&#x2715;</button>
+                      <button onClick={(e) => { e.stopPropagation(); cancelOrd(o.nOrdNo); }} className="px-2 py-0.5 rounded text-[9px] font-semibold" style={{ background: "rgba(239,68,68,.08)", color: "var(--t-rd)", border: "1px solid rgba(239,68,68,.15)" }} data-testid={`button-cancel-order-${i}`}>{"\u2715"}</button>
                     ) : timeStr ? <span className="font-mono text-[9px]" style={{ color: "var(--t-tx3)" }}>{timeStr}</span> : <span />}
                   </div>
                 );
               })}
             </div>
+          </div>
+          )}
           </div>
         </div>
       </div>
