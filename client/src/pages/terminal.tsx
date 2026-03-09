@@ -195,7 +195,8 @@ export default function Terminal() {
   const loadPositions = useCallback(async () => {
     try {
       const r = await (await fetch("/api/positions", { credentials: "include" })).json();
-      if (r.stat === "Ok" && r.data?.length) setPositions(r.data);
+      const st = (r.stat || "").toLowerCase();
+      if ((st === "ok") && r.data?.length) setPositions(r.data);
       else setPositions([]);
     } catch { setPositions([]); }
   }, []);
@@ -203,8 +204,15 @@ export default function Terminal() {
   const loadOrders = useCallback(async () => {
     try {
       const r = await (await fetch("/api/orderbook", { credentials: "include" })).json();
-      if (r.stat === "Ok" && r.data?.length) setOrders([...r.data].reverse());
-      else setOrders([]);
+      const st = (r.stat || "").toLowerCase();
+      if ((st === "ok") && r.data?.length) {
+        const sorted = [...r.data].sort((a: any, b: any) => {
+          const ta = parseInt(a.boeSec || "0");
+          const tb = parseInt(b.boeSec || "0");
+          return tb - ta;
+        });
+        setOrders(sorted);
+      } else setOrders([]);
     } catch { setOrders([]); }
   }, []);
 
@@ -423,11 +431,24 @@ export default function Terminal() {
   const fmtPrice = (p: number) => p.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtStrike = (s: number) => s.toLocaleString("en-IN");
 
-  const totalPnl = positions.reduce((sum, p) => {
+  const getNetQty = (p: any) => {
+    const buyQ = parseInt(p.flBuyQty ?? p.cfBuyQty ?? p.buyQty ?? 0);
+    const sellQ = parseInt(p.flSellQty ?? p.cfSellQty ?? p.sellQty ?? 0);
+    if (p.netQty !== undefined) return parseInt(p.netQty);
+    return buyQ - sellQ;
+  };
+  const getPnl = (p: any) => {
     const ba = parseFloat(p.buyAmt ?? p.cfBuyAmt ?? 0);
     const sa = parseFloat(p.sellAmt ?? p.cfSellAmt ?? 0);
-    return sum + parseFloat(p.unrealizedMTOM ?? p.realizedMTOM ?? (sa - ba));
-  }, 0);
+    return parseFloat(p.unrealizedMTOM ?? p.realizedMTOM ?? String(sa - ba));
+  };
+
+  const openPositions = positions.filter(p => getNetQty(p) !== 0);
+  const closedPositions = positions.filter(p => getNetQty(p) === 0);
+
+  const openPnl = openPositions.reduce((sum, p) => sum + getPnl(p), 0);
+  const closedPnl = closedPositions.reduce((sum, p) => sum + getPnl(p), 0);
+  const totalPnl = openPnl + closedPnl;
 
   const switchIndex = (idx: string) => {
     setCurrentIndex(idx);
@@ -724,11 +745,12 @@ export default function Terminal() {
           </table>
         </div>
 
-        <div className="grid grid-cols-2 shrink-0" style={{ borderTop: "1px solid var(--t-bd)", maxHeight: "260px" }}>
+        <div className="grid grid-cols-2 shrink-0" style={{ borderTop: "1px solid var(--t-bd)", maxHeight: "320px" }}>
           <div className="flex flex-col overflow-hidden" style={{ borderRight: "1px solid var(--t-bd)" }}>
             <div className="flex items-center justify-between px-3 py-2 shrink-0" style={{ background: "var(--t-sf)", borderBottom: "1px solid var(--t-bd)" }}>
               <div className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: "var(--t-tx2)" }}>
-                &#x1F4CA; Positions <span className="text-[9px] px-1.5 py-px rounded-lg font-semibold" style={{ background: "rgba(59,130,246,.1)", color: "var(--t-bl)" }} data-testid="text-pos-count">{positions.length}</span>
+                &#x1F4CA; Positions
+                <span className="text-[9px] px-1.5 py-px rounded-lg font-semibold" style={{ background: "rgba(59,130,246,.1)", color: "var(--t-bl)" }} data-testid="text-pos-count">{positions.length}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <button data-testid="button-close-all" onClick={closeAllPositions} className="px-2.5 py-0.5 rounded text-[10px] font-bold transition-all" style={{ background: "rgba(239,68,68,.08)", color: "var(--t-rd)", border: "1px solid rgba(239,68,68,.15)" }}>&#x2715; Close All</button>
@@ -736,39 +758,88 @@ export default function Terminal() {
               </div>
             </div>
             {positions.length > 0 && (
-              <div className="flex items-center gap-2 px-3 py-1 shrink-0 text-[11px]" style={{ background: "var(--t-bg2)", borderBottom: "1px solid var(--t-bd)" }}>
-                <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--t-tx3)" }}>Net P&L</span>
-                <span className="font-mono font-bold text-[13px]" style={{ color: totalPnl > 0 ? "var(--t-gn)" : totalPnl < 0 ? "var(--t-rd)" : "var(--t-tx3)" }} data-testid="text-total-pnl">
-                  {totalPnl >= 0 ? "+" : "-"}{"\u20B9"}{Math.abs(totalPnl).toFixed(2)}
-                </span>
+              <div className="flex items-center gap-4 px-3 py-1 shrink-0 text-[11px]" style={{ background: "var(--t-bg2)", borderBottom: "1px solid var(--t-bd)" }}>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--t-tx3)" }}>Total</span>
+                  <span className="font-mono font-bold text-[13px]" style={{ color: totalPnl > 0 ? "var(--t-gn)" : totalPnl < 0 ? "var(--t-rd)" : "var(--t-tx3)" }} data-testid="text-total-pnl">
+                    {totalPnl >= 0 ? "+" : "-"}{"\u20B9"}{Math.abs(totalPnl).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--t-tx3)" }}>Open</span>
+                  <span className="font-mono font-semibold text-[11px]" style={{ color: openPnl > 0 ? "var(--t-gn)" : openPnl < 0 ? "var(--t-rd)" : "var(--t-tx3)" }}>
+                    {openPnl >= 0 ? "+" : "-"}{"\u20B9"}{Math.abs(openPnl).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--t-tx3)" }}>Closed</span>
+                  <span className="font-mono font-semibold text-[11px]" style={{ color: closedPnl > 0 ? "var(--t-gn)" : closedPnl < 0 ? "var(--t-rd)" : "var(--t-tx3)" }}>
+                    {closedPnl >= 0 ? "+" : "-"}{"\u20B9"}{Math.abs(closedPnl).toFixed(2)}
+                  </span>
+                </div>
               </div>
             )}
             <div className="flex-1 overflow-y-auto py-0.5">
               {positions.length === 0 ? (
-                <div className="py-5 text-center text-[11px]" style={{ color: "var(--t-tx3)" }}>No open positions</div>
-              ) : positions.map((p, i) => {
-                const qty = parseInt(p.netQty ?? p.cfNetQty ?? p.qty ?? 0);
-                const buyQty = parseInt(p.buyQty ?? p.cfBuyQty ?? 0);
-                const sellQty = parseInt(p.sellQty ?? p.cfSellQty ?? 0);
-                const ba = parseFloat(p.buyAmt ?? p.cfBuyAmt ?? 0);
-                const sa = parseFloat(p.sellAmt ?? p.cfSellAmt ?? 0);
-                const pnl = parseFloat(p.unrealizedMTOM ?? p.realizedMTOM ?? (sa - ba));
-                const avgPx = buyQty > 0 ? (ba / buyQty).toFixed(2) : sellQty > 0 ? (sa / sellQty).toFixed(2) : "--";
-                const sym = p.trdSym ?? p.sym ?? p.tsym ?? "--";
-                const isLong = qty >= 0;
-                const displayQty = buyQty || sellQty || Math.abs(qty);
-                return (
-                  <div key={i} data-testid={`row-position-${i}`} className="grid items-center gap-2 px-3 py-1.5 text-[11px]" style={{ gridTemplateColumns: "1fr auto auto auto", borderBottom: "1px solid rgba(36,48,73,.4)" }}>
-                    <span className="font-mono font-semibold text-[10px] flex items-center gap-1.5">
-                      {sym}
-                      <span className="text-[8px] px-1.5 py-px rounded font-semibold" style={isLong ? { background: "rgba(16,185,129,.08)", color: "var(--t-gn)" } : { background: "rgba(239,68,68,.08)", color: "var(--t-rd)" }}>{isLong ? "LONG" : "SHORT"}</span>
-                    </span>
-                    <span className="font-mono text-[10px]" style={{ color: "var(--t-tx2)" }}>Qty: {displayQty}</span>
-                    <span className="font-mono text-[10px]" style={{ color: "var(--t-tx3)" }}>@{"\u20B9"}{avgPx}</span>
-                    <span className="font-mono font-semibold text-[11px]" style={{ color: pnl >= 0 ? "var(--t-gn)" : "var(--t-rd)" }}>{pnl >= 0 ? "+" : "-"}{"\u20B9"}{Math.abs(pnl).toFixed(2)}</span>
-                  </div>
-                );
-              })}
+                <div className="py-5 text-center text-[11px]" style={{ color: "var(--t-tx3)" }}>No positions today</div>
+              ) : (
+                <>
+                  {openPositions.length > 0 && (
+                    <div className="px-3 py-1 text-[9px] font-bold uppercase tracking-wider" style={{ color: "var(--t-gn)", background: "rgba(16,185,129,.04)", borderBottom: "1px solid rgba(16,185,129,.1)" }} data-testid="section-open-positions">
+                      &#x25CF; Open Positions ({openPositions.length})
+                    </div>
+                  )}
+                  {openPositions.map((p, i) => {
+                    const nq = getNetQty(p);
+                    const pnl = getPnl(p);
+                    const buyQ = parseInt(p.flBuyQty ?? p.cfBuyQty ?? p.buyQty ?? 0);
+                    const sellQ = parseInt(p.flSellQty ?? p.cfSellQty ?? p.sellQty ?? 0);
+                    const ba = parseFloat(p.buyAmt ?? p.cfBuyAmt ?? 0);
+                    const sa = parseFloat(p.sellAmt ?? p.cfSellAmt ?? 0);
+                    const avgPx = nq > 0 ? (buyQ > 0 ? (ba / buyQ).toFixed(2) : "--") : (sellQ > 0 ? (sa / sellQ).toFixed(2) : "--");
+                    const sym = p.trdSym ?? p.sym ?? p.tsym ?? "--";
+                    const isLong = nq > 0;
+                    return (
+                      <div key={`open-${i}`} data-testid={`row-open-position-${i}`} className="grid items-center gap-2 px-3 py-1.5 text-[11px]" style={{ gridTemplateColumns: "1fr auto auto auto", borderBottom: "1px solid rgba(36,48,73,.4)" }}>
+                        <span className="font-mono font-semibold text-[10px] flex items-center gap-1.5">
+                          {sym}
+                          <span className="text-[8px] px-1.5 py-px rounded font-semibold" style={isLong ? { background: "rgba(16,185,129,.08)", color: "var(--t-gn)" } : { background: "rgba(239,68,68,.08)", color: "var(--t-rd)" }}>{isLong ? "LONG" : "SHORT"}</span>
+                        </span>
+                        <span className="font-mono text-[10px]" style={{ color: "var(--t-tx2)" }}>Qty: {Math.abs(nq)}</span>
+                        <span className="font-mono text-[10px]" style={{ color: "var(--t-tx3)" }}>@{"\u20B9"}{avgPx}</span>
+                        <span className="font-mono font-semibold text-[11px]" style={{ color: pnl >= 0 ? "var(--t-gn)" : "var(--t-rd)" }}>{pnl >= 0 ? "+" : "-"}{"\u20B9"}{Math.abs(pnl).toFixed(2)}</span>
+                      </div>
+                    );
+                  })}
+                  {closedPositions.length > 0 && (
+                    <div className="px-3 py-1 text-[9px] font-bold uppercase tracking-wider" style={{ color: "var(--t-tx3)", background: "rgba(100,116,139,.04)", borderBottom: "1px solid rgba(100,116,139,.1)", borderTop: openPositions.length > 0 ? "1px solid var(--t-bd)" : "none" }} data-testid="section-closed-positions">
+                      &#x25CB; Closed Positions ({closedPositions.length})
+                    </div>
+                  )}
+                  {closedPositions.map((p, i) => {
+                    const pnl = getPnl(p);
+                    const buyQ = parseInt(p.flBuyQty ?? p.cfBuyQty ?? p.buyQty ?? 0);
+                    const sellQ = parseInt(p.flSellQty ?? p.cfSellQty ?? p.sellQty ?? 0);
+                    const ba = parseFloat(p.buyAmt ?? p.cfBuyAmt ?? 0);
+                    const sa = parseFloat(p.sellAmt ?? p.cfSellAmt ?? 0);
+                    const avgBuy = buyQ > 0 ? (ba / buyQ).toFixed(2) : "--";
+                    const avgSell = sellQ > 0 ? (sa / sellQ).toFixed(2) : "--";
+                    const sym = p.trdSym ?? p.sym ?? p.tsym ?? "--";
+                    const totalQty = Math.max(buyQ, sellQ);
+                    return (
+                      <div key={`closed-${i}`} data-testid={`row-closed-position-${i}`} className="grid items-center gap-2 px-3 py-1.5 text-[11px]" style={{ gridTemplateColumns: "1fr auto auto auto", borderBottom: "1px solid rgba(36,48,73,.4)", opacity: 0.7 }}>
+                        <span className="font-mono font-semibold text-[10px] flex items-center gap-1.5">
+                          {sym}
+                          <span className="text-[8px] px-1.5 py-px rounded font-semibold" style={{ background: "rgba(100,116,139,.08)", color: "var(--t-tx3)" }}>CLOSED</span>
+                        </span>
+                        <span className="font-mono text-[10px]" style={{ color: "var(--t-tx2)" }}>Qty: {totalQty}</span>
+                        <span className="font-mono text-[10px]" style={{ color: "var(--t-tx3)" }}>{"\u20B9"}{avgBuy}/{avgSell}</span>
+                        <span className="font-mono font-semibold text-[11px]" style={{ color: pnl >= 0 ? "var(--t-gn)" : "var(--t-rd)" }}>{pnl >= 0 ? "+" : "-"}{"\u20B9"}{Math.abs(pnl).toFixed(2)}</span>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
             </div>
           </div>
 

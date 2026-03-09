@@ -418,12 +418,15 @@ export async function registerRoutes(
     if (!s) return;
     try {
       const posResp: any = await kotak.getPositions(s);
-      if (posResp.stat !== "Ok" || !posResp.data?.length) {
+      const pStat = (posResp.stat || "").toLowerCase();
+      if (pStat !== "ok" || !posResp.data?.length) {
         return res.json({ status: "error", message: "No positions to close" });
       }
       const results: any[] = [];
       for (const pos of posResp.data) {
-        const netQty = parseInt(pos.netQty ?? pos.qty ?? "0");
+        const buyQ = parseInt(pos.flBuyQty ?? pos.cfBuyQty ?? pos.buyQty ?? "0");
+        const sellQ = parseInt(pos.flSellQty ?? pos.cfSellQty ?? pos.sellQty ?? "0");
+        const netQty = pos.netQty !== undefined ? parseInt(pos.netQty) : (buyQ - sellQ);
         if (netQty === 0) continue;
         const ts = pos.trdSym || "";
         const es = pos.seg || pos.exSeg || "nse_fo";
