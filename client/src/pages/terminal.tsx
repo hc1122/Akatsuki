@@ -592,7 +592,7 @@ export default function Terminal() {
   }
 
   return (
-    <div className="flex flex-col h-screen" style={{ background: "var(--t-bg)" }}>
+    <div className="flex flex-col h-screen pb-[180px] md:pb-0" style={{ background: "var(--t-bg)" }}>
       <header
         className="flex items-center justify-between px-3 md:px-5 h-11 md:h-12 sticky top-0 z-50 shrink-0"
         style={{ background: "linear-gradient(180deg, var(--t-sf) 0%, var(--t-bg2) 100%)", borderBottom: "1px solid var(--t-bd)" }}
@@ -709,14 +709,22 @@ export default function Terminal() {
         </div>
       </div>
 
-      <div className="flex md:hidden flex-col shrink-0" style={{ background: "var(--t-sf)", borderBottom: "2px solid var(--t-bd)" }}>
-        <div className="flex items-center justify-between px-3 py-1.5" style={{ borderBottom: "1px solid var(--t-bd)" }}>
-          <div className="font-mono text-xs" data-testid="text-selected-strike-mobile">
-            {selectedStrike ? (
-              <span style={{ color: "var(--t-yw)" }}>{"\u25C9"} {fmtStrike(selectedStrike.strike)}</span>
-            ) : (
-              <span className="italic" style={{ color: "var(--t-tx3)" }}>No strike selected</span>
-            )}
+      {/* Mobile bottom bar - pinned to bottom of screen */}
+      <div className="fixed md:hidden bottom-0 left-0 right-0 z-40 flex flex-col" style={{ background: "var(--t-sf)", borderTop: "2px solid var(--t-bd)" }}>
+        <div className="flex items-center justify-between px-3 py-1" style={{ borderBottom: "1px solid var(--t-bd)" }}>
+          <div className="flex items-center gap-2">
+            <div className="font-mono text-xs" data-testid="text-selected-strike-mobile">
+              {selectedStrike ? (
+                <span style={{ color: "var(--t-yw)" }}>{"\u25C9"} {fmtStrike(selectedStrike.strike)}</span>
+              ) : (
+                <span className="italic text-[10px]" style={{ color: "var(--t-tx3)" }}>No strike</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 text-[10px]">
+              <span className="font-mono font-bold" style={{ color: totalPnl > 0 ? "var(--t-gn)" : totalPnl < 0 ? "var(--t-rd)" : "var(--t-tx3)" }} data-testid="text-mobile-pnl">
+                P&L {totalPnl >= 0 ? "+" : ""}{"\u20B9"}{totalPnl.toFixed(0)}
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-1">
             <span className="text-[9px] font-semibold uppercase" style={{ color: "var(--t-tx3)" }}>Lots</span>
@@ -725,37 +733,11 @@ export default function Terminal() {
             <button onClick={() => setLots(Math.min(50, lots + 1))} className="w-7 h-7 flex items-center justify-center rounded font-bold text-sm" style={{ background: "var(--t-sf2)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }}>+</button>
           </div>
         </div>
-        <div className="flex items-center justify-center flex-wrap gap-x-3 gap-y-0.5 px-3 py-1" style={{ background: "var(--t-bg2)", borderBottom: "1px solid var(--t-bd)" }}>
-          <div className="flex items-center gap-1 text-[11px]">
-            <span className="uppercase tracking-wider" style={{ color: "var(--t-tx3)" }}>P&L</span>
-            <span className="font-mono font-bold text-sm" style={{ color: totalPnl > 0 ? "var(--t-gn)" : totalPnl < 0 ? "var(--t-rd)" : "var(--t-tx3)" }} data-testid="text-mobile-pnl">
-              {totalPnl >= 0 ? "+" : "-"}{"\u20B9"}{Math.abs(totalPnl).toFixed(2)}
-            </span>
-          </div>
-          <div className="flex items-center gap-1 text-[10px]">
-            <span style={{ color: "var(--t-tx3)" }}>Open</span>
-            <span className="font-mono font-semibold" style={{ color: openPnl > 0 ? "var(--t-gn)" : openPnl < 0 ? "var(--t-rd)" : "var(--t-tx3)" }}>
-              {openPnl >= 0 ? "+" : ""}{"\u20B9"}{openPnl.toFixed(0)}
-            </span>
-          </div>
-          <div className="flex items-center gap-1 text-[10px]">
-            <span style={{ color: "var(--t-tx3)" }}>Closed</span>
-            <span className="font-mono font-semibold" style={{ color: closedPnl > 0 ? "var(--t-gn)" : closedPnl < 0 ? "var(--t-rd)" : "var(--t-tx3)" }}>
-              {closedPnl >= 0 ? "+" : ""}{"\u20B9"}{closedPnl.toFixed(0)}
-            </span>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3 p-3">
-          <div className="flex flex-col gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-center py-1 rounded" style={{ color: "var(--t-gn)", background: "rgba(16,185,129,.06)" }}>{"\u25B2"} BUY</span>
-            <button data-testid="button-buy-ce-mobile" disabled={!selectedStrike?.ce_ts} onClick={() => fire("B", "CE")} className="py-5 rounded-xl font-mono text-base font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.96] transition-transform" style={{ background: "linear-gradient(135deg, #10b981 0%, #059669 100%)", boxShadow: selectedStrike?.ce_ts ? "0 3px 12px rgba(16,185,129,.35)" : "none" }}>BUY CE</button>
-            <button data-testid="button-buy-pe-mobile" disabled={!selectedStrike?.pe_ts} onClick={() => fire("B", "PE")} className="py-5 rounded-xl font-mono text-base font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.96] transition-transform" style={{ background: "linear-gradient(135deg, #10b981 0%, #059669 100%)", boxShadow: selectedStrike?.pe_ts ? "0 3px 12px rgba(16,185,129,.35)" : "none" }}>BUY PE</button>
-          </div>
-          <div className="flex flex-col gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-center py-1 rounded" style={{ color: "var(--t-rd)", background: "rgba(239,68,68,.06)" }}>{"\u25BC"} SELL</span>
-            <button data-testid="button-sell-ce-mobile" disabled={!selectedStrike?.ce_ts} onClick={() => fire("S", "CE")} className="py-5 rounded-xl font-mono text-base font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.96] transition-transform" style={{ background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)", boxShadow: selectedStrike?.ce_ts ? "0 3px 12px rgba(239,68,68,.35)" : "none" }}>SELL CE</button>
-            <button data-testid="button-sell-pe-mobile" disabled={!selectedStrike?.pe_ts} onClick={() => fire("S", "PE")} className="py-5 rounded-xl font-mono text-base font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.96] transition-transform" style={{ background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)", boxShadow: selectedStrike?.pe_ts ? "0 3px 12px rgba(239,68,68,.35)" : "none" }}>SELL PE</button>
-          </div>
+        <div className="grid grid-cols-2 gap-2.5 p-2.5" style={{ paddingBottom: "max(0.625rem, env(safe-area-inset-bottom))" }}>
+          <button data-testid="button-buy-ce-mobile" disabled={!selectedStrike?.ce_ts} onClick={() => fire("B", "CE")} className="py-4 rounded-xl font-mono text-[15px] font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.96] transition-transform" style={{ background: "linear-gradient(135deg, #10b981 0%, #059669 100%)", boxShadow: selectedStrike?.ce_ts ? "0 3px 12px rgba(16,185,129,.35)" : "none" }}>BUY CE</button>
+          <button data-testid="button-sell-ce-mobile" disabled={!selectedStrike?.ce_ts} onClick={() => fire("S", "CE")} className="py-4 rounded-xl font-mono text-[15px] font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.96] transition-transform" style={{ background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)", boxShadow: selectedStrike?.ce_ts ? "0 3px 12px rgba(239,68,68,.35)" : "none" }}>SELL CE</button>
+          <button data-testid="button-buy-pe-mobile" disabled={!selectedStrike?.pe_ts} onClick={() => fire("B", "PE")} className="py-4 rounded-xl font-mono text-[15px] font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.96] transition-transform" style={{ background: "linear-gradient(135deg, #10b981 0%, #059669 100%)", boxShadow: selectedStrike?.pe_ts ? "0 3px 12px rgba(16,185,129,.35)" : "none" }}>BUY PE</button>
+          <button data-testid="button-sell-pe-mobile" disabled={!selectedStrike?.pe_ts} onClick={() => fire("S", "PE")} className="py-4 rounded-xl font-mono text-[15px] font-bold text-white tracking-wider disabled:opacity-25 disabled:cursor-not-allowed active:scale-[0.96] transition-transform" style={{ background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)", boxShadow: selectedStrike?.pe_ts ? "0 3px 12px rgba(239,68,68,.35)" : "none" }}>SELL PE</button>
         </div>
       </div>
 
@@ -960,7 +942,7 @@ export default function Terminal() {
         </div>
       </div>
 
-      <footer className="flex items-center justify-center flex-wrap gap-x-4 gap-y-0.5 px-4 py-1.5 shrink-0" style={{ background: "var(--t-bg2)", borderTop: "1px solid var(--t-bd)" }}>
+      <footer className="hidden md:flex items-center justify-center flex-wrap gap-x-4 gap-y-0.5 px-4 py-1.5 shrink-0" style={{ background: "var(--t-bg2)", borderTop: "1px solid var(--t-bd)" }}>
         <span className="text-[10px] font-medium" style={{ color: "var(--t-tx3)" }}>Copyright &copy; Akatsuki</span>
         <span className="w-px h-3" style={{ background: "var(--t-bd)" }} />
         <span className="text-[10px]" style={{ color: "var(--t-tx3)" }}>Crafted by <span className="font-semibold" style={{ color: "var(--t-tx2)" }}>Dr. Arvind Dahiya</span> &amp; <span className="font-semibold" style={{ color: "var(--t-tx2)" }}>HC</span></span>
