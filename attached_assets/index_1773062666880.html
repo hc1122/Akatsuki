@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Kotak Scalper Terminal</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+    --bg: #06080d; --bg2: #0c1019; --sf: #111827; --sf2: #1a2332; --sf3: #1f2b3d;
+    --bd: #243049; --bd2: #2d3d5c;
+    --tx: #e2e8f0; --tx2: #94a3b8; --tx3: #64748b;
+    --gn: #10b981; --gn2: #059669; --gn3: rgba(16,185,129,.08); --gn4: rgba(16,185,129,.15);
+    --rd: #ef4444; --rd2: #dc2626; --rd3: rgba(239,68,68,.08); --rd4: rgba(239,68,68,.15);
+    --bl: #3b82f6; --bl2: #2563eb; --bl3: rgba(59,130,246,.1); --bl4: rgba(59,130,246,.2);
+    --yw: #f59e0b; --yw2: rgba(245,158,11,.12);
+    --vl: #8b5cf6;
+    --atm: rgba(59,130,246,.08);
+    --r: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,.3), 0 1px 2px rgba(0,0,0,.2);
+    --shadow2: 0 4px 12px rgba(0,0,0,.4);
+    --transition: all .15s ease;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html { font-size: 13px; }
+body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--tx); overflow-x:hidden; line-height:1.5; }
+
+::-webkit-scrollbar { width:5px; height:5px; }
+::-webkit-scrollbar-track { background:var(--bg2); }
+::-webkit-scrollbar-thumb { background:var(--bd); border-radius:4px; }
+::-webkit-scrollbar-thumb:hover { background:var(--bd2); }
+
+/* ─── HEADER ─── */
+.header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 20px; height:48px;
+    background:linear-gradient(180deg, var(--sf) 0%, var(--bg2) 100%);
+    border-bottom:1px solid var(--bd);
+    position:sticky; top:0; z-index:100;
+}
+.logo { display:flex; align-items:center; gap:10px; }
+.logo-icon { font-size:20px; }
+.logo-text { font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:700; color:var(--bl); letter-spacing:-.5px; }
+.logo-badge { font-size:9px; padding:2px 6px; background:var(--bl3); color:var(--bl); border-radius:10px; font-weight:600; border:1px solid var(--bl4); }
+.header-right { display:flex; align-items:center; gap:14px; }
+.status-pill { display:flex; align-items:center; gap:6px; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:500; }
+.status-pill.offline { background:var(--rd3); color:var(--rd); }
+.status-pill.online { background:var(--gn3); color:var(--gn); }
+.status-dot { width:6px; height:6px; border-radius:50%; }
+.status-pill.offline .status-dot { background:var(--rd); }
+.status-pill.online .status-dot { background:var(--gn); animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.user-name { font-size:11px; color:var(--tx2); font-weight:500; }
+.clock { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--tx3); }
+.logout-btn {
+    padding:5px 12px; background:var(--rd3); color:var(--rd);
+    border:1px solid var(--rd4); border-radius:6px; font-size:11px;
+    font-weight:600; cursor:pointer; transition:var(--transition);
+    font-family:inherit; display:flex; align-items:center; gap:5px;
+}
+.logout-btn:hover { background:var(--rd4); border-color:var(--rd); }
+
+/* ─── LOGIN ─── */
+.login-overlay { position:fixed; inset:0; background:var(--bg); z-index:200; display:flex; align-items:center; justify-content:center; }
+.login-overlay.hidden { display:none; }
+.login-card { width:380px; padding:36px; background:var(--sf); border-radius:16px; border:1px solid var(--bd); box-shadow:var(--shadow2); text-align:center; }
+.login-icon { font-size:48px; margin-bottom:16px; }
+.login-title { font-size:20px; font-weight:700; color:var(--tx); margin-bottom:4px; }
+.login-sub { font-size:12px; color:var(--tx3); margin-bottom:24px; }
+.login-input { width:100%; padding:14px; background:var(--bg); border:1px solid var(--bd); border-radius:var(--r); color:var(--tx); font-family:'JetBrains Mono',monospace; font-size:24px; text-align:center; letter-spacing:12px; transition:var(--transition); outline:none; }
+.login-input:focus { border-color:var(--bl); box-shadow:0 0 0 3px var(--bl3); }
+.login-input::placeholder { letter-spacing:4px; font-size:14px; color:var(--tx3); }
+.login-btn { width:100%; padding:14px; margin-top:14px; background:linear-gradient(135deg, var(--bl) 0%, var(--bl2) 100%); color:#fff; border:none; border-radius:var(--r); font-size:14px; font-weight:600; cursor:pointer; transition:var(--transition); font-family:inherit; }
+.login-btn:hover { transform:translateY(-1px); box-shadow:0 4px 16px rgba(59,130,246,.3); }
+.login-btn:active { transform:translateY(0); }
+.login-btn:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+
+/* ─── MAIN LAYOUT ─── */
+.main { display:none; flex-direction:column; height:calc(100vh - 48px); }
+.main.active { display:flex; }
+
+/* ─── FUNDS BAR ─── */
+.funds-bar { display:flex; align-items:center; gap:2px; padding:0 16px; height:32px; background:var(--bg2); border-bottom:1px solid var(--bd); font-size:11px; }
+.fund-item { display:flex; align-items:center; gap:4px; padding:0 12px; }
+.fund-label { color:var(--tx3); }
+.fund-value { font-family:'JetBrains Mono',monospace; font-weight:600; color:var(--tx); }
+.fund-sep { width:1px; height:16px; background:var(--bd); }
+
+/* ─── CONTROLS BAR ─── */
+.controls { display:flex; align-items:center; gap:8px; padding:8px 16px; background:var(--sf); border-bottom:1px solid var(--bd); }
+.ctrl-group { display:flex; align-items:center; gap:4px; }
+.ctrl-label { font-size:10px; color:var(--tx3); text-transform:uppercase; letter-spacing:.5px; font-weight:600; margin-right:2px; }
+.ctrl-select { padding:6px 28px 6px 10px; background:var(--sf2); color:var(--tx); border:1px solid var(--bd); border-radius:6px; font-family:inherit; font-size:12px; font-weight:500; cursor:pointer; transition:var(--transition); outline:none; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 8px center; }
+.ctrl-select:hover { border-color:var(--bd2); }
+.ctrl-select:focus { border-color:var(--bl); box-shadow:0 0 0 2px var(--bl3); }
+.ctrl-btn { padding:6px 12px; background:var(--sf2); color:var(--tx2); border:1px solid var(--bd); border-radius:6px; font-size:11px; cursor:pointer; transition:var(--transition); font-family:inherit; font-weight:500; display:flex; align-items:center; gap:4px; }
+.ctrl-btn:hover { background:var(--sf3); color:var(--tx); border-color:var(--bd2); }
+.ctrl-btn:active { transform:scale(.97); }
+.ctrl-spacer { flex:1; }
+.spot-display { display:flex; align-items:baseline; gap:6px; }
+.spot-label { font-size:10px; color:var(--tx3); text-transform:uppercase; letter-spacing:.5px; font-weight:600; }
+.spot-price { font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:700; color:var(--yw); text-shadow:0 0 20px rgba(245,158,11,.15); }
+
+/* ─── ACTION BAR (Desktop: CE LEFT | CENTER | PE RIGHT) ─── */
+.action-bar {
+    display:flex; align-items:center; padding:10px 20px; gap:0;
+    background:linear-gradient(180deg, var(--sf) 0%, var(--bg2) 100%);
+    border-bottom:2px solid var(--bd); min-height:70px;
+}
+.trading-side { display:flex; align-items:center; gap:12px; flex-shrink:0; }
+.ce-side { border-right:1px solid var(--bd); padding-right:24px; margin-right:20px; }
+.pe-side { border-left:1px solid var(--bd); padding-left:24px; margin-left:20px; }
+.side-meta { display:flex; flex-direction:column; align-items:center; gap:6px; }
+.side-tag { font-size:9px; font-weight:700; letter-spacing:1px; padding:2px 8px; border-radius:4px; text-transform:uppercase; }
+.ce-tag { background:var(--gn3); color:var(--gn); border:1px solid var(--gn4); }
+.pe-tag { background:var(--rd3); color:var(--rd); border:1px solid var(--rd4); }
+.key-hints { font-size:9px; color:var(--tx3); white-space:nowrap; text-align:center; }
+.key-hints kbd { display:inline-block; padding:1px 4px; background:var(--sf3); border:1px solid var(--bd2); border-radius:3px; font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--tx2); }
+.side-btns { display:flex; flex-direction:column; gap:5px; }
+
+/* Action center */
+.action-center { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:0 20px; }
+.sel-info { display:flex; align-items:center; gap:10px; font-family:'JetBrains Mono',monospace; font-size:13px; justify-content:center; flex-wrap:wrap; }
+.sel-none { color:var(--tx3); font-style:italic; font-family:'Inter',sans-serif; font-size:12px; }
+.sel-strike { font-size:18px; font-weight:700; color:var(--yw); }
+.sel-ce, .sel-pe { font-size:10px; color:var(--tx3); padding:3px 8px; background:var(--sf2); border-radius:4px; }
+.lot-row { display:flex; align-items:center; gap:6px; }
+.lot-label { font-size:10px; color:var(--tx3); text-transform:uppercase; letter-spacing:.5px; font-weight:600; }
+.lot-adj { width:24px; height:24px; display:flex; align-items:center; justify-content:center; background:var(--sf2); border:1px solid var(--bd); border-radius:4px; color:var(--tx); font-size:15px; font-weight:700; cursor:pointer; transition:var(--transition); line-height:1; user-select:none; }
+.lot-adj:hover { background:var(--sf3); border-color:var(--bd2); }
+.lot-input { width:54px; padding:4px 6px; background:var(--bg); border:1px solid var(--bd); border-radius:4px; color:var(--tx); font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:700; text-align:center; outline:none; transition:var(--transition); }
+.lot-input:focus { border-color:var(--bl); box-shadow:0 0 0 2px var(--bl3); }
+.lot-input::-webkit-inner-spin-button,.lot-input::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+
+/* Action buttons */
+.act-btn { padding:9px 20px; border:none; border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; cursor:pointer; transition:var(--transition); letter-spacing:.5px; display:flex; align-items:center; justify-content:center; gap:5px; box-shadow:var(--shadow); white-space:nowrap; min-width:112px; }
+.act-btn:active { transform:scale(.96); }
+.act-btn:disabled { opacity:.25; cursor:not-allowed; transform:none; box-shadow:none; }
+.act-btn.buy-ce { background:linear-gradient(135deg, #10b981 0%, #059669 100%); color:#fff; }
+.act-btn.sell-ce { background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color:#fff; }
+.act-btn.buy-pe { background:linear-gradient(135deg, #10b981 0%, #059669 100%); color:#fff; }
+.act-btn.sell-pe { background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color:#fff; }
+.act-btn.buy-ce:not(:disabled):hover,.act-btn.buy-pe:not(:disabled):hover { box-shadow:0 4px 16px rgba(16,185,129,.35); transform:translateY(-1px); }
+.act-btn.sell-ce:not(:disabled):hover,.act-btn.sell-pe:not(:disabled):hover { box-shadow:0 4px 16px rgba(239,68,68,.35); transform:translateY(-1px); }
+.btn-icon { font-size:10px; }
+
+/* ─── CONTENT ─── */
+.content { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+
+/* ─── OPTION CHAIN ─── */
+.chain-wrap { flex:1; overflow-y:auto; overflow-x:hidden; }
+.chain-table { width:100%; border-collapse:collapse; }
+.chain-table thead { position:sticky; top:0; z-index:10; }
+.chain-table th { padding:8px 6px; font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:var(--tx3); background:var(--sf); border-bottom:2px solid var(--bd); text-align:center; white-space:nowrap; }
+.chain-table th.ce-header { color:var(--gn); }
+.chain-table th.pe-header { color:var(--rd); }
+.chain-table th.strike-header { color:var(--yw); }
+.chain-table tbody tr { cursor:pointer; transition:background .1s ease; border-bottom:1px solid rgba(36,48,73,.5); }
+.chain-table tbody tr:hover { background:var(--sf2); }
+.chain-table tbody tr.atm-row { background:var(--atm); }
+.chain-table tbody tr.atm-row td { border-top:1px solid var(--bl4); border-bottom:1px solid var(--bl4); }
+.chain-table tbody tr.selected-row { background:var(--yw2) !important; }
+.chain-table tbody tr.selected-row td:first-child { box-shadow:inset 3px 0 0 var(--yw); }
+.chain-table td { padding:7px 6px; text-align:center; font-size:12px; }
+.strike-cell { font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px; color:var(--yw); position:relative; }
+.atm-badge { display:inline-block; font-size:8px; padding:1px 5px; margin-left:4px; background:var(--bl4); color:var(--bl); border-radius:3px; font-weight:700; vertical-align:middle; letter-spacing:.5px; }
+.sym-cell { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--tx3); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lot-cell { font-size:10px; color:var(--tx3); }
+.loading-row td { padding:30px; }
+.loading-spin { display:inline-block; width:18px; height:18px; border:2px solid var(--bd); border-top-color:var(--bl); border-radius:50%; animation:spin .6s linear infinite; }
+@keyframes spin { to{transform:rotate(360deg)} }
+
+/* ─── BOTTOM PANELS ─── */
+.bottom-panels { display:grid; grid-template-columns:1fr 1fr; border-top:1px solid var(--bd); max-height:260px; }
+.panel { display:flex; flex-direction:column; border-right:1px solid var(--bd); overflow:hidden; }
+.panel:last-child { border-right:none; }
+.panel-header { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--sf); border-bottom:1px solid var(--bd); flex-shrink:0; }
+.panel-title { font-size:11px; font-weight:600; color:var(--tx2); display:flex; align-items:center; gap:6px; }
+.panel-title-icon { font-size:13px; }
+.panel-count { font-size:9px; padding:1px 6px; background:var(--bl3); color:var(--bl); border-radius:8px; font-weight:600; }
+.panel-actions { display:flex; align-items:center; gap:6px; }
+.panel-refresh { padding:3px 8px; background:transparent; border:1px solid var(--bd); color:var(--tx3); border-radius:4px; font-size:10px; cursor:pointer; transition:var(--transition); }
+.panel-refresh:hover { background:var(--sf2); color:var(--tx); }
+.close-all-btn { padding:3px 10px; background:var(--rd3); color:var(--rd); border:1px solid var(--rd4); border-radius:4px; font-size:10px; font-weight:700; cursor:pointer; transition:var(--transition); font-family:inherit; }
+.close-all-btn:hover { background:var(--rd4); border-color:var(--rd); }
+.close-all-btn:active { transform:scale(.96); }
+.pnl-total { padding:4px 12px; background:var(--bg2); border-bottom:1px solid var(--bd); font-size:11px; display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.pnl-total-label { color:var(--tx3); font-size:10px; text-transform:uppercase; letter-spacing:.5px; }
+.pnl-total-val { font-family:'JetBrains Mono',monospace; font-weight:700; font-size:13px; }
+.pnl-total-val.profit { color:var(--gn); }
+.pnl-total-val.loss { color:var(--rd); }
+.pnl-total-val.zero { color:var(--tx3); }
+.panel-body { flex:1; overflow-y:auto; padding:2px 0; }
+.panel-empty { padding:20px; text-align:center; color:var(--tx3); font-size:11px; }
+
+/* Position rows */
+.pos-row { display:grid; grid-template-columns:1fr auto auto auto; align-items:center; gap:8px; padding:6px 12px; border-bottom:1px solid rgba(36,48,73,.4); font-size:11px; transition:background .1s; }
+.pos-row:hover { background:var(--sf2); }
+.pos-sym { font-family:'JetBrains Mono',monospace; font-weight:600; font-size:10px; display:flex; align-items:center; gap:5px; }
+.pos-qty { font-family:'JetBrains Mono',monospace; color:var(--tx2); font-size:10px; }
+.pos-avg { font-family:'JetBrains Mono',monospace; color:var(--tx3); font-size:10px; }
+.pos-pnl { font-family:'JetBrains Mono',monospace; font-weight:600; font-size:11px; }
+.pos-pnl.profit { color:var(--gn); }
+.pos-pnl.loss { color:var(--rd); }
+.pos-badge { font-size:8px; padding:1px 5px; border-radius:3px; font-weight:600; }
+.pos-badge.buy { background:var(--gn3); color:var(--gn); }
+.pos-badge.sell { background:var(--rd3); color:var(--rd); }
+
+/* Order rows */
+.ord-row { display:grid; grid-template-columns:18px 1fr auto auto auto auto; align-items:center; gap:7px; padding:5px 12px; border-bottom:1px solid rgba(36,48,73,.4); font-size:11px; transition:background .1s; }
+.ord-row:hover { background:var(--sf2); }
+.ord-type { width:18px; height:18px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; flex-shrink:0; }
+.ord-type.buy { background:var(--gn3); color:var(--gn); }
+.ord-type.sell { background:var(--rd3); color:var(--rd); }
+.ord-sym { font-family:'JetBrains Mono',monospace; font-weight:500; font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ord-price { font-family:'JetBrains Mono',monospace; color:var(--yw); font-size:10px; font-weight:600; }
+.ord-qty { font-family:'JetBrains Mono',monospace; color:var(--tx2); font-size:10px; }
+.ord-status { font-size:9px; padding:2px 6px; border-radius:3px; font-weight:600; text-transform:uppercase; letter-spacing:.3px; white-space:nowrap; }
+.ord-status.complete { background:var(--gn3); color:var(--gn); }
+.ord-status.rejected { background:var(--rd3); color:var(--rd); }
+.ord-status.open { background:var(--yw2); color:var(--yw); }
+.ord-status.pending { background:var(--bl3); color:var(--bl); }
+.ord-time { font-family:'JetBrains Mono',monospace; color:var(--tx3); font-size:9px; }
+.ord-cancel { padding:2px 7px; background:var(--rd3); color:var(--rd); border:1px solid var(--rd4); border-radius:3px; font-size:9px; cursor:pointer; font-weight:600; transition:var(--transition); }
+.ord-cancel:hover { background:var(--rd4); }
+
+/* ─── TOAST ─── */
+.toast-container { position:fixed; bottom:16px; right:16px; z-index:999; display:flex; flex-direction:column-reverse; gap:6px; }
+.toast { padding:10px 16px; border-radius:var(--r); font-size:12px; font-weight:500; max-width:360px; display:flex; align-items:center; gap:8px; box-shadow:var(--shadow2); animation:toast-in .25s ease; backdrop-filter:blur(8px); border:1px solid; }
+.toast.success { background:rgba(16,185,129,.15); color:var(--gn); border-color:var(--gn4); }
+.toast.error { background:rgba(239,68,68,.15); color:var(--rd); border-color:var(--rd4); }
+.toast.info { background:rgba(59,130,246,.15); color:var(--bl); border-color:var(--bl4); }
+.toast-icon { font-size:14px; flex-shrink:0; }
+.toast-msg { flex:1; }
+@keyframes toast-in { from{transform:translateY(20px) scale(.95);opacity:0} to{transform:translateY(0) scale(1);opacity:1} }
+
+/* ─── RESPONSIVE ─── */
+@media(max-width:768px) {
+    html { font-size:12px; }
+    .bottom-panels { grid-template-columns:1fr; }
+    .funds-bar { overflow-x:auto; }
+    .controls { flex-wrap:wrap; }
+    .action-bar { flex-direction:column; align-items:stretch; padding:8px 12px; gap:8px; min-height:auto; }
+    .ce-side { border-right:none; border-bottom:1px solid var(--bd); padding-right:0; padding-bottom:8px; margin-right:0; margin-bottom:0; }
+    .pe-side { border-left:none; border-top:1px solid var(--bd); padding-left:0; padding-top:8px; margin-left:0; margin-top:0; }
+    .trading-side { justify-content:center; gap:10px; }
+    .side-btns { flex-direction:row; gap:8px; }
+    .act-btn { flex:1; padding:10px 8px; min-width:auto; }
+    .action-center { padding:4px 0; }
+    .side-meta { flex-direction:row; }
+    .lot-row { justify-content:center; }
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+    <div class="logo">
+        <span class="logo-icon">⚡</span>
+        <span class="logo-text">SCALPER</span>
+        <span class="logo-badge">v2</span>
+    </div>
+    <div class="header-right">
+        <span class="clock" id="clock"></span>
+        <span class="user-name" id="userName"></span>
+        <div class="status-pill offline" id="statusPill">
+            <span class="status-dot"></span>
+            <span id="statusText">Offline</span>
+        </div>
+        <button class="logout-btn" id="logoutBtn" onclick="doLogout()" style="display:none">⏻ Logout</button>
+    </div>
+</div>
+
+<!-- LOGIN -->
+<div class="login-overlay" id="loginOverlay">
+    <div class="login-card">
+        <div class="login-icon">🔐</div>
+        <div class="login-title">Welcome Back</div>
+        <div class="login-sub">Enter your 6-digit TOTP to start trading</div>
+        <input type="text" class="login-input" id="totpInput" placeholder="000000" maxlength="6" autofocus autocomplete="off">
+        <button class="login-btn" id="loginBtn" onclick="doLogin()">Connect & Login</button>
+    </div>
+</div>
+
+<!-- MAIN APP -->
+<div class="main" id="mainApp">
+
+    <div class="funds-bar">
+        <div class="fund-item"><span class="fund-label">Available</span><span class="fund-value" id="fAvail">--</span></div>
+        <div class="fund-sep"></div>
+        <div class="fund-item"><span class="fund-label">Used</span><span class="fund-value" id="fUsed">--</span></div>
+        <div class="fund-sep"></div>
+        <div class="fund-item"><span class="fund-label">Collateral</span><span class="fund-value" id="fColl">--</span></div>
+    </div>
+
+    <div class="controls">
+        <div class="ctrl-group">
+            <span class="ctrl-label">Index</span>
+            <select class="ctrl-select" id="selIndex" onchange="switchIndex()">
+                <option value="NIFTY">NIFTY 50</option>
+                <option value="BANKNIFTY">BANK NIFTY</option>
+                <option value="SENSEX">SENSEX</option>
+            </select>
+        </div>
+        <div class="ctrl-group">
+            <span class="ctrl-label">Expiry</span>
+            <select class="ctrl-select" id="selExpiry" onchange="loadChain()"></select>
+        </div>
+        <div class="ctrl-group">
+            <span class="ctrl-label">Strikes</span>
+            <select class="ctrl-select" id="selStrikes" onchange="loadChain()">
+                <option value="3">±3</option>
+                <option value="5" selected>±5</option>
+                <option value="10">±10</option>
+                <option value="15">±15</option>
+            </select>
+        </div>
+        <button class="ctrl-btn" onclick="loadChain()"><span>↻</span> Refresh</button>
+        <div class="ctrl-spacer"></div>
+        <div class="spot-display">
+            <span class="spot-label">Spot</span>
+            <span class="spot-price" id="spotPrice">--</span>
+        </div>
+    </div>
+
+    <!-- ─── ACTION BAR: [CALL/CE LEFT] — [CENTER: strike + lots] — [PUT/PE RIGHT] ─── -->
+    <div class="action-bar">
+
+        <!-- CE Side — left -->
+        <div class="trading-side ce-side">
+            <div class="side-meta">
+                <span class="side-tag ce-tag">CALL</span>
+                <div class="key-hints"><kbd>1</kbd> buy<br><kbd>3</kbd> sell</div>
+            </div>
+            <div class="side-btns">
+                <button class="act-btn buy-ce" id="btnBuyCE" disabled onclick="fire('B','CE')">
+                    <span class="btn-icon">▲</span> BUY CE
+                </button>
+                <button class="act-btn sell-ce" id="btnSellCE" disabled onclick="fire('S','CE')">
+                    <span class="btn-icon">▼</span> SELL CE
+                </button>
+            </div>
+        </div>
+
+        <!-- Center -->
+        <div class="action-center">
+            <div class="sel-info" id="selInfo">
+                <span class="sel-none">Select a strike from the option chain below</span>
+            </div>
+            <div class="lot-row">
+                <span class="lot-label">LOTS</span>
+                <button class="lot-adj" onclick="adjLot(-1)">−</button>
+                <input type="number" id="lotInput" class="lot-input" value="1" min="1" max="50">
+                <button class="lot-adj" onclick="adjLot(1)">+</button>
+            </div>
+        </div>
+
+        <!-- PE Side — right -->
+        <div class="trading-side pe-side">
+            <div class="side-btns">
+                <button class="act-btn buy-pe" id="btnBuyPE" disabled onclick="fire('B','PE')">
+                    <span class="btn-icon">▲</span> BUY PE
+                </button>
+                <button class="act-btn sell-pe" id="btnSellPE" disabled onclick="fire('S','PE')">
+                    <span class="btn-icon">▼</span> SELL PE
+                </button>
+            </div>
+            <div class="side-meta">
+                <span class="side-tag pe-tag">PUT</span>
+                <div class="key-hints"><kbd>7</kbd> buy<br><kbd>9</kbd> sell</div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="content">
+        <div class="chain-wrap">
+            <table class="chain-table">
+                <thead>
+                    <tr>
+                        <th class="ce-header">CE Symbol</th>
+                        <th class="ce-header">CE Lot</th>
+                        <th class="strike-header">Strike</th>
+                        <th class="pe-header">PE Lot</th>
+                        <th class="pe-header">PE Symbol</th>
+                    </tr>
+                </thead>
+                <tbody id="chainBody">
+                    <tr class="loading-row"><td colspan="5"><div class="loading-spin"></div></td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="bottom-panels">
+
+            <!-- Positions -->
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span class="panel-title-icon">📊</span>
+                        Positions
+                        <span class="panel-count" id="posCount">0</span>
+                    </div>
+                    <div class="panel-actions">
+                        <button class="close-all-btn" onclick="closeAllPositions()">✕ Close All</button>
+                        <button class="panel-refresh" onclick="loadPositions()">↻</button>
+                    </div>
+                </div>
+                <div class="pnl-total" id="pnlTotalBar" style="display:none">
+                    <span class="pnl-total-label">Net P&L</span>
+                    <span class="pnl-total-val zero" id="pnlTotalVal">₹0.00</span>
+                </div>
+                <div class="panel-body" id="posBody">
+                    <div class="panel-empty">No open positions</div>
+                </div>
+            </div>
+
+            <!-- Orders -->
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span class="panel-title-icon">📋</span>
+                        Orders
+                        <span class="panel-count" id="ordCount">0</span>
+                    </div>
+                    <div class="panel-actions">
+                        <button class="panel-refresh" onclick="loadOrders()">↻</button>
+                    </div>
+                </div>
+                <div class="panel-body" id="ordBody">
+                    <div class="panel-empty">No orders today</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ─── STATE ───
+let ws = null, curIdx = 'NIFTY', spotTimer = null, sel = null;
+window._chain = [];
+
+// ─── CLOCK ───
+function updateClock() {
+    const n = new Date();
+    document.getElementById('clock').textContent =
+        String(n.getHours()).padStart(2,'0') + ':' +
+        String(n.getMinutes()).padStart(2,'0') + ':' +
+        String(n.getSeconds()).padStart(2,'0');
+}
+setInterval(updateClock, 1000); updateClock();
+
+// ─── TOAST ───
+function toast(msg, type = 'info') {
+    const icons = {success:'✅', error:'❌', info:'ℹ️'};
+    const c = document.getElementById('toastContainer');
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.innerHTML = `<span class="toast-icon">${icons[type]||'ℹ️'}</span><span class="toast-msg">${msg}</span>`;
+    c.appendChild(t);
+    setTimeout(() => { t.style.opacity='0'; t.style.transform='translateY(10px)'; setTimeout(()=>t.remove(),200); }, 4000);
+}
+
+// ─── LOT ADJUST ───
+function adjLot(d) {
+    const inp = document.getElementById('lotInput');
+    inp.value = Math.max(1, Math.min(50, (parseInt(inp.value)||1) + d));
+}
+
+// ─── LOGIN ───
+async function doLogin() {
+    const t = document.getElementById('totpInput').value.trim();
+    if (t.length !== 6) { toast('Enter 6-digit TOTP', 'error'); return; }
+    const btn = document.getElementById('loginBtn');
+    btn.textContent = 'Connecting...'; btn.disabled = true;
+    try {
+        const r = await (await fetch('/api/login', {
+            method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({totp:t})
+        })).json();
+        if (r.status === 'success') {
+            toast('Welcome, ' + (r.greeting || 'Trader'), 'success');
+            showApp(r.greeting || '');
+        } else { toast(r.message || 'Login failed', 'error'); }
+    } catch(e) { toast('Connection error', 'error'); }
+    btn.textContent = 'Connect & Login'; btn.disabled = false;
+}
+document.getElementById('totpInput').onkeydown = e => { if(e.key==='Enter') doLogin(); };
+
+function showApp(name) {
+    document.getElementById('loginOverlay').classList.add('hidden');
+    document.getElementById('mainApp').classList.add('active');
+    document.getElementById('statusPill').className = 'status-pill online';
+    document.getElementById('statusText').textContent = 'Live';
+    document.getElementById('userName').textContent = name;
+    document.getElementById('logoutBtn').style.display = 'flex';
+    initWS(); loadExpiries(); loadChain(); loadLimits(); startSpot();
+    loadPositions(); loadOrders();
+}
+
+// ─── LOGOUT ───
+async function doLogout() {
+    if (!confirm('Logout and end trading session?')) return;
+    try { await fetch('/api/logout', {method:'POST'}); } catch(e) {}
+    document.getElementById('loginOverlay').classList.remove('hidden');
+    document.getElementById('mainApp').classList.remove('active');
+    document.getElementById('statusPill').className = 'status-pill offline';
+    document.getElementById('statusText').textContent = 'Offline';
+    document.getElementById('userName').textContent = '';
+    document.getElementById('logoutBtn').style.display = 'none';
+    document.getElementById('totpInput').value = '';
+    document.getElementById('posBody').innerHTML = '<div class="panel-empty">No open positions</div>';
+    document.getElementById('ordBody').innerHTML = '<div class="panel-empty">No orders today</div>';
+    document.getElementById('posCount').textContent = '0';
+    document.getElementById('ordCount').textContent = '0';
+    document.getElementById('pnlTotalBar').style.display = 'none';
+    document.getElementById('spotPrice').textContent = '--';
+    sel = null; window._chain = [];
+    if (ws) { ws.onclose = null; ws.close(); ws = null; }
+    if (spotTimer) { clearInterval(spotTimer); spotTimer = null; }
+    toast('Logged out successfully', 'info');
+}
+
+// ─── CLOSE ALL POSITIONS ───
+async function closeAllPositions() {
+    if (!confirm('Close ALL open positions at market price?')) return;
+    try {
+        const r = await (await fetch('/api/order/close-all', {method:'POST'})).json();
+        if (r.status === 'ok') {
+            toast(`Closing ${r.closed} position(s) at market...`, 'info');
+            setTimeout(() => { loadPositions(); loadOrders(); }, 1500);
+        } else { toast(r.message || 'Close all failed', 'error'); }
+    } catch(e) { toast('Network error', 'error'); }
+}
+
+// ─── WEBSOCKET ───
+function initWS() {
+    const proto = location.protocol==='https:'?'wss':'ws';
+    ws = new WebSocket(`${proto}://${location.host}/ws`);
+    ws.onmessage = e => {
+        const m = JSON.parse(e.data);
+        if (m.type==='order_update'||m.type==='order_cancelled') {
+            const d = m.data;
+            if (d.stat==='Ok'||d.nOrdNo) toast(`${m.action||'Order'} #${d.nOrdNo||''}`, 'success');
+            else toast(d.emsg||d.errMsg||'Order failed', 'error');
+            loadOrders(); loadPositions();
+        } else if (m.type==='instruments_ready') {
+            toast(`${m.index} instruments loaded`, 'info');
+            if (m.index===curIdx) loadExpiries();
+        } else if (m.type==='close_all') {
+            loadPositions(); loadOrders();
+        }
+    };
+    ws.onclose = () => {
+        document.getElementById('statusPill').className = 'status-pill offline';
+        document.getElementById('statusText').textContent = 'Reconnecting...';
+        setTimeout(initWS, 3000);
+    };
+    ws.onopen = () => {
+        document.getElementById('statusPill').className = 'status-pill online';
+        document.getElementById('statusText').textContent = 'Live';
+    };
+    setInterval(() => { if(ws&&ws.readyState===1) ws.send('ping'); }, 25000);
+}
+
+// ─── SPOT ───
+function startSpot() {
+    refreshSpot();
+    if (spotTimer) clearInterval(spotTimer);
+    spotTimer = setInterval(refreshSpot, 3000);
+}
+async function refreshSpot() {
+    try {
+        const r = await (await fetch('/api/spot/'+curIdx)).json();
+        const p = parseFloat(r.spot);
+        if (p > 0) document.getElementById('spotPrice').textContent =
+            p.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+    } catch(e) {}
+}
+
+// ─── EXPIRIES ───
+async function loadExpiries() {
+    try {
+        const r = await (await fetch('/api/expiries/'+curIdx)).json();
+        const s = document.getElementById('selExpiry');
+        s.innerHTML = '';
+        (r.expiries||[]).forEach(e => {
+            const o = document.createElement('option');
+            o.value = e.label; o.textContent = e.label;
+            if (e.is_nearest) o.selected = true;
+            s.appendChild(o);
+        });
+    } catch(e) {}
+}
+
+function switchIndex() {
+    curIdx = document.getElementById('selIndex').value;
+    sel = null; updateSelection();
+    loadExpiries(); loadChain(); refreshSpot();
+}
+
+// ─── OPTION CHAIN ───
+async function loadChain() {
+    const tbody = document.getElementById('chainBody');
+    const strikes = document.getElementById('selStrikes').value;
+    const expiry = document.getElementById('selExpiry').value || '';
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="5"><div class="loading-spin"></div></td></tr>';
+    sel = null; updateSelection();
+    try {
+        const r = await (await fetch(`/api/option-chain/${curIdx}?strikes=${strikes}&expiry=${encodeURIComponent(expiry)}`)).json();
+        if (r.error) {
+            tbody.innerHTML = `<tr><td colspan="5" class="panel-empty" style="padding:40px">${r.error}</td></tr>`; return;
+        }
+        if (r.spot_price) {
+            document.getElementById('spotPrice').textContent =
+                parseFloat(r.spot_price).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+        }
+        const chain = r.chain || [];
+        window._chain = chain;
+        if (!chain.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="panel-empty" style="padding:40px">No data available</td></tr>'; return;
+        }
+        let html = '';
+        chain.forEach((row, i) => {
+            const cls = row.is_atm ? 'atm-row' : '';
+            const badge = row.is_atm ? '<span class="atm-badge">ATM</span>' : '';
+            html += `<tr class="${cls}" data-idx="${i}" onclick="pickStrike(${i})">
+                <td class="sym-cell">${row.ce_ts||'—'}</td>
+                <td class="lot-cell">${row.ce_ts ? row.ce_lot : '—'}</td>
+                <td class="strike-cell">${row.strike.toLocaleString('en-IN')}${badge}</td>
+                <td class="lot-cell">${row.pe_ts ? row.pe_lot : '—'}</td>
+                <td class="sym-cell">${row.pe_ts||'—'}</td>
+            </tr>`;
+        });
+        tbody.innerHTML = html;
+        const atmIdx = chain.findIndex(r => r.is_atm);
+        if (atmIdx >= 0) pickStrike(atmIdx);
+    } catch(e) {
+        tbody.innerHTML = '<tr><td colspan="5" class="panel-empty" style="padding:40px">Failed to load chain</td></tr>';
+    }
+}
+
+function pickStrike(i) {
+    const chain = window._chain;
+    if (!chain||!chain[i]) return;
+    sel = chain[i];
+    document.querySelectorAll('#chainBody tr').forEach(r => r.classList.remove('selected-row'));
+    const row = document.querySelector(`#chainBody tr[data-idx="${i}"]`);
+    if (row) { row.classList.add('selected-row'); row.scrollIntoView({block:'nearest'}); }
+    updateSelection();
+}
+
+function updateSelection() {
+    const info = document.getElementById('selInfo');
+    const btns = ['btnBuyCE','btnSellCE','btnBuyPE','btnSellPE'];
+    if (!sel) {
+        info.innerHTML = '<span class="sel-none">Select a strike from the option chain below</span>';
+        btns.forEach(b => document.getElementById(b).disabled = true); return;
+    }
+    const ce = sel.ce_ts ? `<span class="sel-ce">CE: ${sel.ce_ts}</span>` : '<span class="sel-ce" style="opacity:.3">CE: N/A</span>';
+    const pe = sel.pe_ts ? `<span class="sel-pe">PE: ${sel.pe_ts}</span>` : '<span class="sel-pe" style="opacity:.3">PE: N/A</span>';
+    info.innerHTML = `<span class="sel-strike">${sel.strike.toLocaleString('en-IN')}</span>${ce}${pe}`;
+    document.getElementById('btnBuyCE').disabled = !sel.ce_ts;
+    document.getElementById('btnSellCE').disabled = !sel.ce_ts;
+    document.getElementById('btnBuyPE').disabled = !sel.pe_ts;
+    document.getElementById('btnSellPE').disabled = !sel.pe_ts;
+}
+
+// ─── FIRE ORDER ───
+async function fire(tt, ot) {
+    if (!sel) { toast('Select a strike first', 'error'); return; }
+    const ts = sel[`${ot.toLowerCase()}_ts`];
+    const es = sel[`${ot.toLowerCase()}_seg`];
+    const lotSize = sel[`${ot.toLowerCase()}_lot`] || 1;
+    const lotMult = parseInt(document.getElementById('lotInput').value) || 1;
+    const qty = lotSize * lotMult;
+    const sym = sel[`${ot.toLowerCase()}_symbol`] || '';
+    if (!ts) { toast('No symbol available', 'error'); return; }
+
+    const action = `${tt==='B'?'BUY':'SELL'} ${ot}`;
+    toast(`${action} ${sel.strike} · ${lotMult} lot(s)...`, 'info');
+
+    try {
+        const r = await (await fetch('/api/order/quick', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({tt, ts, es, lot:qty, symbol:sym})
+        })).json();
+        if (r.stat==='Ok'||r.nOrdNo) toast(`✓ ${action} ${sel.strike} placed #${r.nOrdNo}`, 'success');
+        else toast(`${action} failed: ${r.emsg||r.errMsg||'Unknown error'}`, 'error');
+        loadOrders(); loadPositions();
+    } catch(e) { toast('Network error', 'error'); }
+}
+
+// ─── KEYBOARD SHORTCUTS (Numpad: 1=BUY CE, 3=SELL CE, 7=BUY PE, 9=SELL PE) ───
+document.addEventListener('keydown', e => {
+    if (e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA') return;
+    if (!document.getElementById('mainApp').classList.contains('active')) return;
+    if (e.code==='Numpad1'||(e.key==='1'&&!e.ctrlKey&&!e.altKey&&!e.metaKey)) { e.preventDefault(); fire('B','CE'); }
+    else if (e.code==='Numpad3'||(e.key==='3'&&!e.ctrlKey&&!e.altKey&&!e.metaKey)) { e.preventDefault(); fire('S','CE'); }
+    else if (e.code==='Numpad7'||(e.key==='7'&&!e.ctrlKey&&!e.altKey&&!e.metaKey)) { e.preventDefault(); fire('B','PE'); }
+    else if (e.code==='Numpad9'||(e.key==='9'&&!e.ctrlKey&&!e.altKey&&!e.metaKey)) { e.preventDefault(); fire('S','PE'); }
+});
+
+// ─── POSITIONS (robust field handling) ───
+async function loadPositions() {
+    try {
+        const r = await (await fetch('/api/positions')).json();
+        const c = document.getElementById('posBody');
+        const cnt = document.getElementById('posCount');
+        const pnlBar = document.getElementById('pnlTotalBar');
+        const pnlVal = document.getElementById('pnlTotalVal');
+
+        if (r.stat !== 'Ok' || !r.data || !r.data.length) {
+            c.innerHTML = '<div class="panel-empty">No open positions</div>';
+            cnt.textContent = '0'; pnlBar.style.display = 'none'; return;
+        }
+
+        let totalPnl = 0;
+        let html = '';
+        let activeCount = 0;
+
+        r.data.forEach(p => {
+            // Kotak may return netQty, qty, or cfNetQty
+            const qty = parseInt(p.netQty ?? p.cfNetQty ?? p.qty ?? 0);
+            const buyQty = parseInt(p.buyQty ?? p.cfBuyQty ?? 0);
+            const sellQty = parseInt(p.sellQty ?? p.cfSellQty ?? 0);
+            const ba = parseFloat(p.buyAmt ?? p.cfBuyAmt ?? 0);
+            const sa = parseFloat(p.sellAmt ?? p.cfSellAmt ?? 0);
+
+            // P&L calculation
+            const pnl = parseFloat(p.unrealizedMTOM ?? p.realizedMTOM ?? (sa - ba));
+            totalPnl += pnl;
+
+            // Average buy price
+            const avgPx = buyQty > 0 ? (ba / buyQty).toFixed(2) : (sellQty > 0 ? (sa / sellQty).toFixed(2) : '--');
+
+            const sym = p.trdSym ?? p.sym ?? p.tsym ?? '--';
+            const isLong = qty >= 0;
+            const displayQty = buyQty || sellQty || Math.abs(qty);
+            const badge = isLong
+                ? '<span class="pos-badge buy">LONG</span>'
+                : '<span class="pos-badge sell">SHORT</span>';
+
+            const pnlCls = pnl >= 0 ? 'profit' : 'loss';
+            const pnlStr = (pnl >= 0 ? '+' : '') + '₹' + Math.abs(pnl).toFixed(2);
+            const pnlSign = pnl >= 0 ? '+' : '-';
+
+            activeCount++;
+            html += `<div class="pos-row">
+                <span class="pos-sym">${sym} ${badge}</span>
+                <span class="pos-qty">Qty: ${displayQty}</span>
+                <span class="pos-avg">@₹${avgPx}</span>
+                <span class="pos-pnl ${pnlCls}">${pnlSign}₹${Math.abs(pnl).toFixed(2)}</span>
+            </div>`;
+        });
+
+        cnt.textContent = activeCount;
+        c.innerHTML = html || '<div class="panel-empty">Positions loaded — check qty fields</div>';
+
+        // Total P&L bar
+        pnlBar.style.display = 'flex';
+        const tcls = totalPnl > 0 ? 'profit' : totalPnl < 0 ? 'loss' : 'zero';
+        pnlVal.className = `pnl-total-val ${tcls}`;
+        pnlVal.textContent = (totalPnl >= 0 ? '+' : '-') + '₹' + Math.abs(totalPnl).toFixed(2);
+
+    } catch(e) {
+        document.getElementById('posBody').innerHTML = '<div class="panel-empty">Error loading positions</div>';
+    }
+}
+
+// ─── ORDERS (newest first, execution price, time) ───
+async function loadOrders() {
+    try {
+        const r = await (await fetch('/api/orderbook')).json();
+        const c = document.getElementById('ordBody');
+        const cnt = document.getElementById('ordCount');
+
+        if (r.stat !== 'Ok' || !r.data || !r.data.length) {
+            c.innerHTML = '<div class="panel-empty">No orders today</div>';
+            cnt.textContent = '0'; return;
+        }
+
+        // Reverse for newest-first
+        const orders = [...r.data].reverse();
+        cnt.textContent = orders.length;
+
+        let html = '';
+        orders.slice(0, 50).forEach(o => {
+            const isBuy = o.trnsTp === 'B';
+            const typeCls = isBuy ? 'buy' : 'sell';
+
+            let stCls = 'pending';
+            const st = (o.ordSt || '').toLowerCase();
+            if (st.includes('reject')) stCls = 'rejected';
+            else if (st.includes('complete')||st.includes('traded')) stCls = 'complete';
+            else if (st.includes('open')||st.includes('trigger')) stCls = 'open';
+
+            // Best price to show: fill price for executed, else order price
+            const fillPx = o.flPrc || o.avgPrc;
+            const ordPx = o.prc;
+            let dispPx = '--';
+            if (fillPx && parseFloat(fillPx) > 0) dispPx = parseFloat(fillPx).toFixed(2);
+            else if (ordPx && parseFloat(ordPx) > 0) dispPx = parseFloat(ordPx).toFixed(2);
+            else dispPx = 'MKT';
+
+            // Time extraction
+            const rawT = o.ordTm || o.exTm || o.ordGenTm || o.actOrdNo || '';
+            let timeStr = '';
+            const tm = rawT.match(/(\d{2}:\d{2}:\d{2})/);
+            if (tm) timeStr = tm[1];
+
+            const cancelBtn = stCls === 'open'
+                ? `<button class="ord-cancel" onclick="event.stopPropagation();cancelOrd('${o.nOrdNo}')">✕</button>`
+                : '<span></span>';
+
+            html += `<div class="ord-row">
+                <div class="ord-type ${typeCls}">${isBuy?'B':'S'}</div>
+                <span class="ord-sym">${o.trdSym}</span>
+                <span class="ord-price">${dispPx}</span>
+                <span class="ord-qty">${o.qty}</span>
+                <span class="ord-status ${stCls}">${o.ordSt}</span>
+                ${timeStr ? `<span class="ord-time">${timeStr}</span>` : cancelBtn}
+            </div>`;
+        });
+        c.innerHTML = html;
+    } catch(e) {
+        document.getElementById('ordBody').innerHTML = '<div class="panel-empty">Error loading orders</div>';
+    }
+}
+
+async function cancelOrd(n) {
+    try {
+        const r = await (await fetch('/api/order/cancel', {
+            method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({on:n})
+        })).json();
+        if (r.stat==='Ok') toast('Order cancelled', 'success');
+        else toast(r.emsg||'Cancel failed', 'error');
+        loadOrders();
+    } catch(e) { toast('Network error', 'error'); }
+}
+
+// ─── LIMITS ───
+async function loadLimits() {
+    try {
+        const r = await (await fetch('/api/limits')).json();
+        if (r.stat === 'Ok') {
+            const fmt = v => '₹' + parseFloat(v||0).toLocaleString('en-IN', {maximumFractionDigits:0});
+            document.getElementById('fAvail').textContent = fmt(r.Net);
+            document.getElementById('fUsed').textContent = fmt(r.MarginUsed);
+            document.getElementById('fColl').textContent = fmt(r.CollateralValue);
+        }
+    } catch(e) {}
+    setTimeout(loadLimits, 30000);
+}
+
+// ─── AUTO SESSION ───
+(async () => {
+    try {
+        const r = await (await fetch('/api/session')).json();
+        if (r.logged_in) showApp(r.greeting || '');
+    } catch(e) {}
+})();
+</script>
+</body>
+</html>
