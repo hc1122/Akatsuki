@@ -465,7 +465,6 @@ export default function Terminal() {
           <div className="text-5xl mb-2">&#x26A1;</div>
           <div className="mb-1">
             <span className="font-mono text-lg font-bold" style={{ color: "var(--t-bl)", letterSpacing: "-0.5px" }}>AKATSUKI</span>
-            <span className="text-xs font-semibold ml-1.5" style={{ color: "var(--t-rd)" }}>SCALPER</span>
           </div>
           <h1 className="text-lg font-bold mb-0.5" style={{ color: "var(--t-tx)" }}>{isRegister ? "Create Account" : "Welcome Back"}</h1>
           <p className="text-xs mb-6" style={{ color: "var(--t-tx3)" }}>{isRegister ? "Sign up to start trading" : "Sign in to your trading account"}</p>
@@ -599,7 +598,6 @@ export default function Terminal() {
         <div className="flex items-center gap-2.5">
           <span className="text-xl">&#x26A1;</span>
           <span className="font-mono text-[15px] font-bold" style={{ color: "var(--t-bl)", letterSpacing: "-0.5px" }}>AKATSUKI</span>
-          <span className="text-[10px] font-semibold" style={{ color: "var(--t-rd)", letterSpacing: "0.5px" }}>SCALPER</span>
         </div>
         <div className="flex items-center gap-3.5">
           <span className="font-mono text-[11px]" style={{ color: "var(--t-tx3)" }} data-testid="text-clock">{clock}</span>
