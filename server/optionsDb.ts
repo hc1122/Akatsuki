@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { log } from "./index";
-import { fetchScripPaths } from "./kotak";
+import { fetchScripPaths, type KotakSession } from "./kotak";
 import type { OptionEntry } from "@shared/schema";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -279,7 +279,7 @@ export function getExpiries(indexName: string) {
   };
 }
 
-export async function downloadCsv(indexName: string) {
+export async function downloadCsv(indexName: string, session?: KotakSession) {
   const key = indexName.toUpperCase();
   const csvKey = ["NIFTY", "BANKNIFTY", "FINNIFTY"].includes(key) ? "nse_fo" : "bse_fo";
   const todayStr = new Date().toISOString().split("T")[0];
@@ -290,7 +290,8 @@ export async function downloadCsv(indexName: string) {
     return filePath;
   }
 
-  const paths = await fetchScripPaths();
+  if (!session) return "";
+  const paths = await fetchScripPaths(session);
   const target = paths.filter((p: string) => p.includes(csvKey));
   if (target.length === 0) return "";
 

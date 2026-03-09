@@ -21,11 +21,26 @@ interface ToastItem {
 
 let toastId = 0;
 
+type AuthStep = "login" | "credentials" | "totp" | "terminal";
+
 export default function Terminal() {
-  const [loggedIn, setLoggedIn] = useState(false);
+  const [authStep, setAuthStep] = useState<AuthStep>("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [isRegister, setIsRegister] = useState(false);
+  const [traderId, setTraderId] = useState("");
+
+  const [credAccessToken, setCredAccessToken] = useState("");
+  const [credMobile, setCredMobile] = useState("");
+  const [credMpin, setCredMpin] = useState("");
+  const [credUcc, setCredUcc] = useState("");
+  const [credSaving, setCredSaving] = useState(false);
+
   const [greeting, setGreeting] = useState("");
   const [totp, setTotp] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
+
   const [currentIndex, setCurrentIndex] = useState("NIFTY");
   const [expiries, setExpiries] = useState<Array<{ label: string; is_nearest: boolean }>>([]);
   const [selectedExpiry, setSelectedExpiry] = useState("");
@@ -44,7 +59,6 @@ export default function Terminal() {
   const [clock, setClock] = useState("");
   const wsRef = useRef<WebSocket | null>(null);
   const spotTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const chainBodyRef = useRef<HTMLTableSectionElement>(null);
 
   const addToast = useCallback((msg: string, type: "success" | "error" | "info" = "info") => {
     const id = ++toastId;
@@ -67,12 +81,20 @@ export default function Terminal() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/session")
+    fetch("/api/auth/session", { credentials: "include" })
       .then(r => r.json())
       .then((d: any) => {
-        if (d.logged_in) {
-          setLoggedIn(true);
-          setGreeting(d.greeting || "");
+        if (d.authenticated) {
+          setAuthEmail(d.email || "");
+          setTraderId(d.traderId || "");
+          if (d.kotakConnected) {
+            setGreeting(d.greeting || "");
+            setAuthStep("terminal");
+          } else if (d.hasCredentials) {
+            setAuthStep("totp");
+          } else {
+            setAuthStep("credentials");
+          }
         }
       })
       .catch(() => {});
@@ -130,11 +152,11 @@ export default function Terminal() {
         }
       } catch {}
     };
-  }, [addToast]);
+  }, [addToast, traderId]);
 
   const refreshSpot = useCallback(async () => {
     try {
-      const r = await (await fetch(`/api/spot/${currentIndex}`)).json();
+      const r = await (await fetch(`/api/spot/${currentIndex}`, { credentials: "include" })).json();
       const p = parseFloat(r.spot);
       if (p > 0) setSpotPrice(p);
     } catch {}
@@ -142,7 +164,7 @@ export default function Terminal() {
 
   const loadExpiries = useCallback(async () => {
     try {
-      const r = await (await fetch(`/api/expiries/${currentIndex}`)).json();
+      const r = await (await fetch(`/api/expiries/${currentIndex}`, { credentials: "include" })).json();
       const exps = r.expiries || [];
       setExpiries(exps);
       const nearest = exps.find((e: any) => e.is_nearest);
@@ -157,63 +179,47 @@ export default function Terminal() {
     setSelectedIdx(-1);
     try {
       const r = await (await fetch(
-        `/api/option-chain/${currentIndex}?strikes=${numStrikes}&expiry=${encodeURIComponent(selectedExpiry)}`
+        `/api/option-chain/${currentIndex}?strikes=${numStrikes}&expiry=${encodeURIComponent(selectedExpiry)}`,
+        { credentials: "include" }
       )).json();
-      if (r.error) {
-        setChain([]);
-        setChainLoading(false);
-        return;
-      }
+      if (r.error) { setChain([]); setChainLoading(false); return; }
       if (r.spot_price) setSpotPrice(parseFloat(r.spot_price));
       const c = r.chain || [];
       setChain(c);
       const atmIdx = c.findIndex((row: any) => row.is_atm);
-      if (atmIdx >= 0) {
-        setSelectedStrike(c[atmIdx]);
-        setSelectedIdx(atmIdx);
-      }
+      if (atmIdx >= 0) { setSelectedStrike(c[atmIdx]); setSelectedIdx(atmIdx); }
     } catch {}
     setChainLoading(false);
   }, [currentIndex, numStrikes, selectedExpiry]);
 
   const loadPositions = useCallback(async () => {
     try {
-      const r = await (await fetch("/api/positions")).json();
-      if (r.stat === "Ok" && r.data?.length) {
-        setPositions(r.data);
-      } else {
-        setPositions([]);
-      }
+      const r = await (await fetch("/api/positions", { credentials: "include" })).json();
+      if (r.stat === "Ok" && r.data?.length) setPositions(r.data);
+      else setPositions([]);
     } catch { setPositions([]); }
   }, []);
 
   const loadOrders = useCallback(async () => {
     try {
-      const r = await (await fetch("/api/orderbook")).json();
-      if (r.stat === "Ok" && r.data?.length) {
-        setOrders([...r.data].reverse());
-      } else {
-        setOrders([]);
-      }
+      const r = await (await fetch("/api/orderbook", { credentials: "include" })).json();
+      if (r.stat === "Ok" && r.data?.length) setOrders([...r.data].reverse());
+      else setOrders([]);
     } catch { setOrders([]); }
   }, []);
 
   const loadLimits = useCallback(async () => {
     try {
-      const r = await (await fetch("/api/limits")).json();
+      const r = await (await fetch("/api/limits", { credentials: "include" })).json();
       if (r.stat === "Ok") {
         const fmt = (v: any) => "\u20B9" + parseFloat(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
-        setFunds({
-          available: fmt(r.Net),
-          used: fmt(r.MarginUsed),
-          collateral: fmt(r.CollateralValue),
-        });
+        setFunds({ available: fmt(r.Net), used: fmt(r.MarginUsed), collateral: fmt(r.CollateralValue) });
       }
     } catch {}
   }, []);
 
   useEffect(() => {
-    if (!loggedIn) return;
+    if (authStep !== "terminal") return;
     connectWs();
     loadLimits();
     loadPositions();
@@ -225,36 +231,84 @@ export default function Terminal() {
       if (reconnectRef.current) { clearTimeout(reconnectRef.current); reconnectRef.current = null; }
       if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
     };
-  }, [loggedIn]);
+  }, [authStep]);
 
   useEffect(() => {
-    if (!loggedIn) return;
+    if (authStep !== "terminal") return;
     loadExpiries();
     refreshSpot();
     if (spotTimerRef.current) clearInterval(spotTimerRef.current);
     spotTimerRef.current = setInterval(refreshSpot, 3000);
-    return () => {
-      if (spotTimerRef.current) clearInterval(spotTimerRef.current);
-    };
-  }, [loggedIn, currentIndex]);
+    return () => { if (spotTimerRef.current) clearInterval(spotTimerRef.current); };
+  }, [authStep, currentIndex]);
 
   useEffect(() => {
-    if (loggedIn && selectedExpiry) loadChain();
-  }, [loggedIn, currentIndex, numStrikes, selectedExpiry]);
+    if (authStep === "terminal" && selectedExpiry) loadChain();
+  }, [authStep, currentIndex, numStrikes, selectedExpiry]);
 
-  const doLogin = async () => {
+  const doAuthLogin = async () => {
+    if (!authEmail || !authPassword) { addToast("Email and password required", "error"); return; }
+    if (isRegister && authPassword.length < 6) { addToast("Password must be at least 6 characters", "error"); return; }
+    setAuthLoading(true);
+    try {
+      const url = isRegister ? "/api/auth/register" : "/api/auth/login";
+      const r = await (await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: authEmail, password: authPassword }),
+      })).json();
+      if (r.status === "success") {
+        setTraderId(r.traderId || "");
+        addToast(isRegister ? "Account created!" : "Logged in!", "success");
+        if (r.hasCredentials) {
+          setAuthStep("totp");
+        } else {
+          setAuthStep("credentials");
+        }
+      } else {
+        addToast(r.message || "Failed", "error");
+      }
+    } catch { addToast("Connection error", "error"); }
+    setAuthLoading(false);
+  };
+
+  const doSaveCredentials = async () => {
+    if (!credAccessToken || !credMobile || !credMpin || !credUcc) {
+      addToast("All fields are required", "error"); return;
+    }
+    setCredSaving(true);
+    try {
+      const r = await (await fetch("/api/auth/credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ accessToken: credAccessToken, mobileNumber: credMobile, mpin: credMpin, ucc: credUcc }),
+      })).json();
+      if (r.status === "success") {
+        addToast("Credentials saved!", "success");
+        setAuthStep("totp");
+      } else {
+        addToast(r.message || "Failed", "error");
+      }
+    } catch { addToast("Connection error", "error"); }
+    setCredSaving(false);
+  };
+
+  const doTotpLogin = async () => {
     if (totp.length !== 6) { addToast("Enter 6-digit TOTP", "error"); return; }
     setLoggingIn(true);
     try {
-      const r = await (await fetch("/api/login", {
+      const r = await (await fetch("/api/kotak/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ totp }),
       })).json();
       if (r.status === "success") {
         addToast(`Welcome, ${r.greeting || "Trader"}`, "success");
-        setLoggedIn(true);
         setGreeting(r.greeting || "");
+        setAuthStep("terminal");
       } else {
         addToast(r.message || "Login failed", "error");
       }
@@ -264,8 +318,9 @@ export default function Terminal() {
 
   const doLogout = async () => {
     if (!confirm("Logout and end trading session?")) return;
-    try { await fetch("/api/logout", { method: "POST" }); } catch {}
-    setLoggedIn(false);
+    try { await fetch("/api/auth/logout", { method: "POST", credentials: "include" }); } catch {}
+    setAuthStep("login");
+    setIsRegister(false);
     setGreeting("");
     setTotp("");
     setChain([]);
@@ -273,9 +328,10 @@ export default function Terminal() {
     setOrders([]);
     setSpotPrice(0);
     setSelectedStrike(null);
+    setTraderId("");
     if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
     if (spotTimerRef.current) clearInterval(spotTimerRef.current);
-    addToast("Logged out successfully", "info");
+    addToast("Logged out", "info");
   };
 
   const precomputedRef = useRef<Record<string, string>>({});
@@ -296,11 +352,10 @@ export default function Terminal() {
       if (!ts) continue;
       for (const tt of ["B", "S"]) {
         const qty = lotSize * lots;
-        const jData = JSON.stringify({
+        builds[`${tt}_${ot}`] = JSON.stringify({
           am: "NO", dq: "0", es, mp: "0", pc: "MIS", pf: "N",
           pr: "0", pt: "MKT", qt: String(qty), rt: "DAY", tp: "0", ts, tt,
         });
-        builds[`${tt}_${ot}`] = jData;
       }
     }
     precomputedRef.current = builds;
@@ -309,23 +364,21 @@ export default function Terminal() {
   const fire = useCallback((tt: string, ot: string) => {
     const strike = strikeRef.current;
     if (!strike) { addToast("Select a strike first", "error"); return; }
-
     const key = `${tt}_${ot}`;
     const jData = precomputedRef.current[key];
     if (!jData) { addToast("No symbol available", "error"); return; }
-
     const action = `${tt === "B" ? "BUY" : "SELL"} ${ot} ${strike.strike}`;
     addToast(`${action} x${lotsRef.current} sent`, "info");
-
     fetch("/api/order/fast", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ jData, action }),
     }).catch(() => addToast("Network error", "error"));
   }, [addToast]);
 
   useEffect(() => {
-    if (!loggedIn) return;
+    if (authStep !== "terminal") return;
     const handler = (e: KeyboardEvent) => {
       if (["INPUT", "SELECT", "TEXTAREA"].includes((e.target as HTMLElement).tagName)) return;
       if (e.code === "Numpad1" || (e.key === "1" && !e.ctrlKey && !e.altKey && !e.metaKey)) { e.preventDefault(); fire("B", "CE"); }
@@ -335,7 +388,7 @@ export default function Terminal() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [loggedIn, fire]);
+  }, [authStep, fire]);
 
   const pickStrike = (i: number) => {
     if (!chain[i]) return;
@@ -346,7 +399,7 @@ export default function Terminal() {
   const closeAllPositions = async () => {
     if (!confirm("Close ALL open positions at market price?")) return;
     try {
-      const r = await (await fetch("/api/order/close-all", { method: "POST" })).json();
+      const r = await (await fetch("/api/order/close-all", { method: "POST", credentials: "include" })).json();
       if (r.status === "ok") {
         addToast(`Closing ${r.closed} position(s) at market...`, "info");
         setTimeout(() => { loadPositions(); loadOrders(); }, 1500);
@@ -358,6 +411,7 @@ export default function Terminal() {
     try {
       const r = await (await fetch("/api/order/cancel", {
         method: "POST", headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ on: n }),
       })).json();
       if (r.stat === "Ok") addToast("Order cancelled", "success");
@@ -382,40 +436,127 @@ export default function Terminal() {
     setChain([]);
   };
 
-  if (!loggedIn) {
+  if (authStep === "login") {
     return (
       <div className="fixed inset-0 flex items-center justify-center" style={{ background: "var(--t-bg)" }} data-testid="login-overlay">
-        <div
-          className="w-[380px] p-9 rounded-2xl text-center animate-fade-in"
-          style={{ background: "var(--t-sf)", border: "1px solid var(--t-bd)", boxShadow: "0 4px 12px rgba(0,0,0,.4)" }}
-        >
+        <div className="w-[400px] p-9 rounded-2xl text-center animate-fade-in" style={{ background: "var(--t-sf)", border: "1px solid var(--t-bd)", boxShadow: "0 4px 12px rgba(0,0,0,.4)" }}>
+          <div className="text-5xl mb-4">&#x26A1;</div>
+          <h1 className="text-xl font-bold mb-1" style={{ color: "var(--t-tx)" }}>{isRegister ? "Create Account" : "Welcome Back"}</h1>
+          <p className="text-xs mb-6" style={{ color: "var(--t-tx3)" }}>{isRegister ? "Sign up to start trading" : "Sign in to your trading account"}</p>
+
+          <input
+            data-testid="input-email"
+            type="email"
+            value={authEmail}
+            onChange={e => setAuthEmail(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && doAuthLogin()}
+            placeholder="Email address"
+            autoFocus
+            className="w-full p-3 rounded-lg text-sm outline-none mb-2.5 transition-all"
+            style={{ background: "var(--t-bg)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }}
+          />
+          <input
+            data-testid="input-password"
+            type="password"
+            value={authPassword}
+            onChange={e => setAuthPassword(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && doAuthLogin()}
+            placeholder="Password"
+            className="w-full p-3 rounded-lg text-sm outline-none mb-3.5 transition-all"
+            style={{ background: "var(--t-bg)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }}
+          />
+          <button
+            data-testid="button-login"
+            onClick={doAuthLogin}
+            disabled={authLoading}
+            className="w-full p-3.5 rounded-lg text-sm font-semibold text-white transition-all disabled:opacity-50"
+            style={{ background: "linear-gradient(135deg, var(--t-bl) 0%, var(--t-bl2) 100%)" }}
+          >
+            {authLoading ? "..." : isRegister ? "Create Account" : "Sign In"}
+          </button>
+          <button
+            data-testid="button-toggle-register"
+            onClick={() => setIsRegister(!isRegister)}
+            className="mt-3 text-xs font-medium transition-all"
+            style={{ color: "var(--t-bl)" }}
+          >
+            {isRegister ? "Already have an account? Sign In" : "Don't have an account? Create one"}
+          </button>
+        </div>
+        <ToastContainer toasts={toasts} />
+      </div>
+    );
+  }
+
+  if (authStep === "credentials") {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center" style={{ background: "var(--t-bg)" }} data-testid="credentials-overlay">
+        <div className="w-[440px] p-9 rounded-2xl text-center animate-fade-in" style={{ background: "var(--t-sf)", border: "1px solid var(--t-bd)", boxShadow: "0 4px 12px rgba(0,0,0,.4)" }}>
+          <div className="text-5xl mb-4">&#x1F511;</div>
+          <h1 className="text-xl font-bold mb-1" style={{ color: "var(--t-tx)" }}>Kotak Credentials</h1>
+          <p className="text-xs mb-6" style={{ color: "var(--t-tx3)" }}>Enter your Kotak Securities API credentials. These are saved securely and only need to be entered once.</p>
+
+          <CredInput data-testid="input-access-token" label="Access Token" value={credAccessToken} onChange={setCredAccessToken} />
+          <CredInput data-testid="input-mobile" label="Mobile Number" value={credMobile} onChange={setCredMobile} />
+          <CredInput data-testid="input-mpin" label="MPIN" value={credMpin} onChange={setCredMpin} type="password" />
+          <CredInput data-testid="input-ucc" label="UCC (Client Code)" value={credUcc} onChange={setCredUcc} />
+
+          <button
+            data-testid="button-save-credentials"
+            onClick={doSaveCredentials}
+            disabled={credSaving}
+            className="w-full p-3.5 mt-2 rounded-lg text-sm font-semibold text-white transition-all disabled:opacity-50"
+            style={{ background: "linear-gradient(135deg, var(--t-gn) 0%, var(--t-gn2) 100%)" }}
+          >
+            {credSaving ? "Saving..." : "Save & Continue"}
+          </button>
+        </div>
+        <ToastContainer toasts={toasts} />
+      </div>
+    );
+  }
+
+  if (authStep === "totp") {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center" style={{ background: "var(--t-bg)" }} data-testid="totp-overlay">
+        <div className="w-[380px] p-9 rounded-2xl text-center animate-fade-in" style={{ background: "var(--t-sf)", border: "1px solid var(--t-bd)", boxShadow: "0 4px 12px rgba(0,0,0,.4)" }}>
           <div className="text-5xl mb-4">&#x1F510;</div>
-          <h1 className="text-xl font-bold mb-1" style={{ color: "var(--t-tx)" }}>Welcome Back</h1>
-          <p className="text-xs mb-6" style={{ color: "var(--t-tx3)" }}>Enter your 6-digit TOTP to start trading</p>
+          <h1 className="text-xl font-bold mb-1" style={{ color: "var(--t-tx)" }}>Enter TOTP</h1>
+          <p className="text-xs mb-1" style={{ color: "var(--t-bl)" }}>{authEmail}</p>
+          <p className="text-xs mb-6" style={{ color: "var(--t-tx3)" }}>Enter your 6-digit TOTP to connect to Kotak</p>
           <input
             data-testid="input-totp"
             type="text"
             value={totp}
             onChange={e => setTotp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-            onKeyDown={e => e.key === "Enter" && doLogin()}
+            onKeyDown={e => e.key === "Enter" && doTotpLogin()}
             placeholder="000000"
             maxLength={6}
             autoFocus
             className="w-full p-3.5 rounded-lg font-mono text-2xl text-center tracking-[12px] outline-none transition-all"
-            style={{
-              background: "var(--t-bg)",
-              border: "1px solid var(--t-bd)",
-              color: "var(--t-tx)",
-            }}
+            style={{ background: "var(--t-bg)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }}
           />
           <button
-            data-testid="button-login"
-            onClick={doLogin}
+            data-testid="button-connect"
+            onClick={doTotpLogin}
             disabled={loggingIn}
-            className="w-full p-3.5 mt-3.5 rounded-lg text-sm font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full p-3.5 mt-3.5 rounded-lg text-sm font-semibold text-white transition-all disabled:opacity-50"
             style={{ background: "linear-gradient(135deg, var(--t-bl) 0%, var(--t-bl2) 100%)" }}
           >
-            {loggingIn ? "Connecting..." : "Connect & Login"}
+            {loggingIn ? "Connecting..." : "Connect & Trade"}
+          </button>
+          <button
+            data-testid="button-back-logout"
+            onClick={() => {
+              fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+              setAuthStep("login");
+              setTotp("");
+              setIsRegister(false);
+            }}
+            className="mt-3 text-xs font-medium transition-all"
+            style={{ color: "var(--t-tx3)" }}
+          >
+            Sign out
           </button>
         </div>
         <ToastContainer toasts={toasts} />
@@ -425,7 +566,6 @@ export default function Terminal() {
 
   return (
     <div className="flex flex-col h-screen" style={{ background: "var(--t-bg)" }}>
-      {/* HEADER */}
       <header
         className="flex items-center justify-between px-5 h-12 sticky top-0 z-50 shrink-0"
         style={{ background: "linear-gradient(180deg, var(--t-sf) 0%, var(--t-bg2) 100%)", borderBottom: "1px solid var(--t-bd)" }}
@@ -433,23 +573,17 @@ export default function Terminal() {
         <div className="flex items-center gap-2.5">
           <span className="text-xl">&#x26A1;</span>
           <span className="font-mono text-[15px] font-bold" style={{ color: "var(--t-bl)", letterSpacing: "-0.5px" }}>SCALPER</span>
-          <span
-            className="text-[9px] px-1.5 py-0.5 rounded-xl font-semibold"
-            style={{ background: "rgba(59,130,246,.1)", color: "var(--t-bl)", border: "1px solid rgba(59,130,246,.2)" }}
-          >v2</span>
+          <span className="text-[9px] px-1.5 py-0.5 rounded-xl font-semibold" style={{ background: "rgba(59,130,246,.1)", color: "var(--t-bl)", border: "1px solid rgba(59,130,246,.2)" }}>v2</span>
         </div>
         <div className="flex items-center gap-3.5">
           <span className="font-mono text-[11px]" style={{ color: "var(--t-tx3)" }} data-testid="text-clock">{clock}</span>
-          <span className="text-[11px] font-medium" style={{ color: "var(--t-tx2)" }} data-testid="text-username">{greeting}</span>
+          <span className="text-[11px] font-medium" style={{ color: "var(--t-tx2)" }} data-testid="text-username">{greeting || authEmail}</span>
           <div
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
             style={wsConnected ? { background: "rgba(16,185,129,.08)", color: "var(--t-gn)" } : { background: "rgba(239,68,68,.08)", color: "var(--t-rd)" }}
             data-testid="status-pill"
           >
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${wsConnected ? "animate-pulse-dot" : ""}`}
-              style={{ background: wsConnected ? "var(--t-gn)" : "var(--t-rd)" }}
-            />
+            <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? "animate-pulse-dot" : ""}`} style={{ background: wsConnected ? "var(--t-gn)" : "var(--t-rd)" }} />
             <span>{wsConnected ? "Live" : "Offline"}</span>
           </div>
           <button
@@ -457,17 +591,11 @@ export default function Terminal() {
             onClick={doLogout}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all"
             style={{ background: "rgba(239,68,68,.08)", color: "var(--t-rd)", border: "1px solid rgba(239,68,68,.15)" }}
-          >
-            &#x23FB; Logout
-          </button>
+          >&#x23FB; Logout</button>
         </div>
       </header>
 
-      {/* FUNDS BAR */}
-      <div
-        className="flex items-center gap-0.5 px-4 h-8 text-[11px] shrink-0"
-        style={{ background: "var(--t-bg2)", borderBottom: "1px solid var(--t-bd)" }}
-      >
+      <div className="flex items-center gap-0.5 px-4 h-8 text-[11px] shrink-0" style={{ background: "var(--t-bg2)", borderBottom: "1px solid var(--t-bd)" }}>
         <FundItem label="Available" value={funds.available} />
         <div className="w-px h-4 mx-3" style={{ background: "var(--t-bd)" }} />
         <FundItem label="Used" value={funds.used} />
@@ -475,113 +603,56 @@ export default function Terminal() {
         <FundItem label="Collateral" value={funds.collateral} />
       </div>
 
-      {/* CONTROLS */}
-      <div
-        className="flex items-center gap-2 px-4 py-2 shrink-0 flex-wrap"
-        style={{ background: "var(--t-sf)", borderBottom: "1px solid var(--t-bd)" }}
-      >
+      <div className="flex items-center gap-2 px-4 py-2 shrink-0 flex-wrap" style={{ background: "var(--t-sf)", borderBottom: "1px solid var(--t-bd)" }}>
         <CtrlGroup label="Index">
-          <select
-            data-testid="select-index"
-            value={currentIndex}
-            onChange={e => switchIndex(e.target.value)}
-            className="ctrl-select"
-          >
+          <select data-testid="select-index" value={currentIndex} onChange={e => switchIndex(e.target.value)} className="ctrl-select">
             <option value="NIFTY">NIFTY 50</option>
             <option value="BANKNIFTY">BANK NIFTY</option>
             <option value="SENSEX">SENSEX</option>
           </select>
         </CtrlGroup>
         <CtrlGroup label="Expiry">
-          <select
-            data-testid="select-expiry"
-            value={selectedExpiry}
-            onChange={e => setSelectedExpiry(e.target.value)}
-            className="ctrl-select"
-          >
-            {expiries.map(exp => (
-              <option key={exp.label} value={exp.label}>{exp.label}</option>
-            ))}
+          <select data-testid="select-expiry" value={selectedExpiry} onChange={e => setSelectedExpiry(e.target.value)} className="ctrl-select">
+            {expiries.map(exp => <option key={exp.label} value={exp.label}>{exp.label}</option>)}
           </select>
         </CtrlGroup>
         <CtrlGroup label="Strikes">
-          <select
-            data-testid="select-strikes"
-            value={numStrikes}
-            onChange={e => setNumStrikes(parseInt(e.target.value))}
-            className="ctrl-select"
-          >
+          <select data-testid="select-strikes" value={numStrikes} onChange={e => setNumStrikes(parseInt(e.target.value))} className="ctrl-select">
             <option value="3">&plusmn;3</option>
             <option value="5">&plusmn;5</option>
             <option value="10">&plusmn;10</option>
             <option value="15">&plusmn;15</option>
           </select>
         </CtrlGroup>
-        <button
-          data-testid="button-refresh-chain"
-          onClick={loadChain}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[11px] font-medium transition-all"
-          style={{ background: "var(--t-sf2)", color: "var(--t-tx2)", border: "1px solid var(--t-bd)" }}
-        >
-          &#x21BB; Refresh
-        </button>
+        <button data-testid="button-refresh-chain" onClick={loadChain} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[11px] font-medium transition-all" style={{ background: "var(--t-sf2)", color: "var(--t-tx2)", border: "1px solid var(--t-bd)" }}>&#x21BB; Refresh</button>
         <div className="flex-1" />
         <div className="flex items-baseline gap-1.5">
           <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--t-tx3)" }}>Spot</span>
-          <span
-            className="font-mono text-[22px] font-bold"
-            style={{ color: "var(--t-yw)", textShadow: "0 0 20px rgba(245,158,11,.15)" }}
-            data-testid="text-spot-price"
-          >
-            {spotPrice > 0 ? fmtPrice(spotPrice) : "--"}
-          </span>
+          <span className="font-mono text-[22px] font-bold" style={{ color: "var(--t-yw)", textShadow: "0 0 20px rgba(245,158,11,.15)" }} data-testid="text-spot-price">{spotPrice > 0 ? fmtPrice(spotPrice) : "--"}</span>
         </div>
       </div>
 
-      {/* ACTION BAR */}
-      <div
-        className="flex items-center px-5 gap-0 shrink-0"
-        style={{
-          background: "linear-gradient(180deg, var(--t-sf) 0%, var(--t-bg2) 100%)",
-          borderBottom: "2px solid var(--t-bd)",
-          minHeight: "70px",
-        }}
-      >
-        {/* CE Side */}
+      <div className="flex items-center px-5 gap-0 shrink-0" style={{ background: "linear-gradient(180deg, var(--t-sf) 0%, var(--t-bg2) 100%)", borderBottom: "2px solid var(--t-bd)", minHeight: "70px" }}>
         <div className="flex items-center gap-3 shrink-0 pr-6 mr-5" style={{ borderRight: "1px solid var(--t-bd)" }}>
           <div className="flex flex-col items-center gap-1.5">
-            <span
-              className="text-[9px] font-bold tracking-wider uppercase px-2 py-0.5 rounded"
-              style={{ background: "rgba(16,185,129,.08)", color: "var(--t-gn)", border: "1px solid rgba(16,185,129,.15)" }}
-            >CALL</span>
+            <span className="text-[9px] font-bold tracking-wider uppercase px-2 py-0.5 rounded" style={{ background: "rgba(16,185,129,.08)", color: "var(--t-gn)", border: "1px solid rgba(16,185,129,.15)" }}>CALL</span>
             <div className="text-[9px] text-center whitespace-nowrap" style={{ color: "var(--t-tx3)" }}>
-              <kbd className="inline-block px-1 py-px rounded font-mono text-[9px]" style={{ background: "var(--t-sf3)", border: "1px solid var(--t-bd2)", color: "var(--t-tx2)" }}>1</kbd> buy
-              <br />
+              <kbd className="inline-block px-1 py-px rounded font-mono text-[9px]" style={{ background: "var(--t-sf3)", border: "1px solid var(--t-bd2)", color: "var(--t-tx2)" }}>1</kbd> buy<br />
               <kbd className="inline-block px-1 py-px rounded font-mono text-[9px]" style={{ background: "var(--t-sf3)", border: "1px solid var(--t-bd2)", color: "var(--t-tx2)" }}>3</kbd> sell
             </div>
           </div>
           <div className="flex flex-col gap-1.5">
-            <ActionButton data-testid="button-buy-ce" variant="buy" disabled={!selectedStrike?.ce_ts} onClick={() => fire("B", "CE")}>
-              &#x25B2; BUY CE
-            </ActionButton>
-            <ActionButton data-testid="button-sell-ce" variant="sell" disabled={!selectedStrike?.ce_ts} onClick={() => fire("S", "CE")}>
-              &#x25BC; SELL CE
-            </ActionButton>
+            <ActionButton data-testid="button-buy-ce" variant="buy" disabled={!selectedStrike?.ce_ts} onClick={() => fire("B", "CE")}>&#x25B2; BUY CE</ActionButton>
+            <ActionButton data-testid="button-sell-ce" variant="sell" disabled={!selectedStrike?.ce_ts} onClick={() => fire("S", "CE")}>&#x25BC; SELL CE</ActionButton>
           </div>
         </div>
-
-        {/* Center */}
         <div className="flex-1 flex flex-col items-center justify-center gap-2 px-5">
           <div className="flex items-center gap-2.5 font-mono text-[13px] justify-center flex-wrap" data-testid="text-selected-strike">
             {selectedStrike ? (
               <>
                 <span className="text-lg font-bold" style={{ color: "var(--t-yw)" }}>{fmtStrike(selectedStrike.strike)}</span>
-                <span className="text-[10px] px-2 py-0.5 rounded" style={{ color: "var(--t-tx3)", background: "var(--t-sf2)" }}>
-                  CE: {selectedStrike.ce_ts || "N/A"}
-                </span>
-                <span className="text-[10px] px-2 py-0.5 rounded" style={{ color: "var(--t-tx3)", background: "var(--t-sf2)" }}>
-                  PE: {selectedStrike.pe_ts || "N/A"}
-                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded" style={{ color: "var(--t-tx3)", background: "var(--t-sf2)" }}>CE: {selectedStrike.ce_ts || "N/A"}</span>
+                <span className="text-[10px] px-2 py-0.5 rounded" style={{ color: "var(--t-tx3)", background: "var(--t-sf2)" }}>PE: {selectedStrike.pe_ts || "N/A"}</span>
               </>
             ) : (
               <span className="text-xs italic" style={{ color: "var(--t-tx3)" }}>Select a strike from the option chain below</span>
@@ -589,56 +660,27 @@ export default function Terminal() {
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--t-tx3)" }}>LOTS</span>
-            <button
-              data-testid="button-lot-minus"
-              onClick={() => setLots(Math.max(1, lots - 1))}
-              className="w-6 h-6 flex items-center justify-center rounded font-bold text-[15px] select-none transition-all"
-              style={{ background: "var(--t-sf2)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }}
-            >&minus;</button>
-            <input
-              data-testid="input-lots"
-              type="number"
-              value={lots}
-              onChange={e => setLots(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
-              className="w-14 py-1 px-1.5 rounded text-center font-mono text-base font-bold outline-none transition-all"
-              style={{ background: "var(--t-bg)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }}
-            />
-            <button
-              data-testid="button-lot-plus"
-              onClick={() => setLots(Math.min(50, lots + 1))}
-              className="w-6 h-6 flex items-center justify-center rounded font-bold text-[15px] select-none transition-all"
-              style={{ background: "var(--t-sf2)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }}
-            >+</button>
+            <button data-testid="button-lot-minus" onClick={() => setLots(Math.max(1, lots - 1))} className="w-6 h-6 flex items-center justify-center rounded font-bold text-[15px] select-none transition-all" style={{ background: "var(--t-sf2)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }}>&minus;</button>
+            <input data-testid="input-lots" type="number" value={lots} onChange={e => setLots(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))} className="w-14 py-1 px-1.5 rounded text-center font-mono text-base font-bold outline-none" style={{ background: "var(--t-bg)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }} />
+            <button data-testid="button-lot-plus" onClick={() => setLots(Math.min(50, lots + 1))} className="w-6 h-6 flex items-center justify-center rounded font-bold text-[15px] select-none transition-all" style={{ background: "var(--t-sf2)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }}>+</button>
           </div>
         </div>
-
-        {/* PE Side */}
         <div className="flex items-center gap-3 shrink-0 pl-6 ml-5" style={{ borderLeft: "1px solid var(--t-bd)" }}>
           <div className="flex flex-col gap-1.5">
-            <ActionButton data-testid="button-buy-pe" variant="buy" disabled={!selectedStrike?.pe_ts} onClick={() => fire("B", "PE")}>
-              &#x25B2; BUY PE
-            </ActionButton>
-            <ActionButton data-testid="button-sell-pe" variant="sell" disabled={!selectedStrike?.pe_ts} onClick={() => fire("S", "PE")}>
-              &#x25BC; SELL PE
-            </ActionButton>
+            <ActionButton data-testid="button-buy-pe" variant="buy" disabled={!selectedStrike?.pe_ts} onClick={() => fire("B", "PE")}>&#x25B2; BUY PE</ActionButton>
+            <ActionButton data-testid="button-sell-pe" variant="sell" disabled={!selectedStrike?.pe_ts} onClick={() => fire("S", "PE")}>&#x25BC; SELL PE</ActionButton>
           </div>
           <div className="flex flex-col items-center gap-1.5">
-            <span
-              className="text-[9px] font-bold tracking-wider uppercase px-2 py-0.5 rounded"
-              style={{ background: "rgba(239,68,68,.08)", color: "var(--t-rd)", border: "1px solid rgba(239,68,68,.15)" }}
-            >PUT</span>
+            <span className="text-[9px] font-bold tracking-wider uppercase px-2 py-0.5 rounded" style={{ background: "rgba(239,68,68,.08)", color: "var(--t-rd)", border: "1px solid rgba(239,68,68,.15)" }}>PUT</span>
             <div className="text-[9px] text-center whitespace-nowrap" style={{ color: "var(--t-tx3)" }}>
-              <kbd className="inline-block px-1 py-px rounded font-mono text-[9px]" style={{ background: "var(--t-sf3)", border: "1px solid var(--t-bd2)", color: "var(--t-tx2)" }}>7</kbd> buy
-              <br />
+              <kbd className="inline-block px-1 py-px rounded font-mono text-[9px]" style={{ background: "var(--t-sf3)", border: "1px solid var(--t-bd2)", color: "var(--t-tx2)" }}>7</kbd> buy<br />
               <kbd className="inline-block px-1 py-px rounded font-mono text-[9px]" style={{ background: "var(--t-sf3)", border: "1px solid var(--t-bd2)", color: "var(--t-tx2)" }}>9</kbd> sell
             </div>
           </div>
         </div>
       </div>
 
-      {/* CONTENT */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* OPTION CHAIN TABLE */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
           <table className="w-full border-collapse">
             <thead className="sticky top-0 z-10">
@@ -650,19 +692,11 @@ export default function Terminal() {
                 <th className="py-2 px-1.5 text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap" style={{ background: "var(--t-sf)", borderBottom: "2px solid var(--t-bd)", color: "var(--t-rd)" }}>PE Symbol</th>
               </tr>
             </thead>
-            <tbody ref={chainBodyRef}>
+            <tbody>
               {chainLoading ? (
-                <tr>
-                  <td colSpan={5} className="py-8 text-center">
-                    <div className="inline-block w-5 h-5 rounded-full animate-spin-slow" style={{ border: "2px solid var(--t-bd)", borderTopColor: "var(--t-bl)" }} />
-                  </td>
-                </tr>
+                <tr><td colSpan={5} className="py-8 text-center"><div className="inline-block w-5 h-5 rounded-full animate-spin-slow" style={{ border: "2px solid var(--t-bd)", borderTopColor: "var(--t-bl)" }} /></td></tr>
               ) : chain.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-10 text-center text-[11px]" style={{ color: "var(--t-tx3)" }}>
-                    {expiries.length === 0 ? "Loading instruments..." : "No data available"}
-                  </td>
-                </tr>
+                <tr><td colSpan={5} className="py-10 text-center text-[11px]" style={{ color: "var(--t-tx3)" }}>{expiries.length === 0 ? "Loading instruments..." : "No data available"}</td></tr>
               ) : chain.map((row, i) => (
                 <tr
                   key={row.strike}
@@ -670,73 +704,41 @@ export default function Terminal() {
                   onClick={() => pickStrike(i)}
                   className="cursor-pointer transition-colors"
                   style={{
-                    background: selectedIdx === i
-                      ? "rgba(245,158,11,.12)"
-                      : row.is_atm
-                        ? "rgba(59,130,246,.08)"
-                        : "transparent",
+                    background: selectedIdx === i ? "rgba(245,158,11,.12)" : row.is_atm ? "rgba(59,130,246,.08)" : "transparent",
                     borderBottom: "1px solid rgba(36,48,73,.5)",
                     ...(selectedIdx === i ? { boxShadow: "inset 3px 0 0 var(--t-yw)" } : {}),
                     ...(row.is_atm ? { borderTop: "1px solid rgba(59,130,246,.2)", borderBottom: "1px solid rgba(59,130,246,.2)" } : {}),
                   }}
                 >
-                  <td className="py-1.5 px-1.5 text-center font-mono text-[10px] max-w-[140px] overflow-hidden text-ellipsis whitespace-nowrap" style={{ color: "var(--t-tx3)" }}>
-                    {row.ce_ts || "\u2014"}
-                  </td>
-                  <td className="py-1.5 px-1.5 text-center text-[10px]" style={{ color: "var(--t-tx3)" }}>
-                    {row.ce_ts ? row.ce_lot : "\u2014"}
-                  </td>
+                  <td className="py-1.5 px-1.5 text-center font-mono text-[10px] max-w-[140px] overflow-hidden text-ellipsis whitespace-nowrap" style={{ color: "var(--t-tx3)" }}>{row.ce_ts || "\u2014"}</td>
+                  <td className="py-1.5 px-1.5 text-center text-[10px]" style={{ color: "var(--t-tx3)" }}>{row.ce_ts ? row.ce_lot : "\u2014"}</td>
                   <td className="py-1.5 px-1.5 text-center font-mono font-bold text-sm" style={{ color: "var(--t-yw)" }}>
                     {fmtStrike(row.strike)}
-                    {row.is_atm && (
-                      <span
-                        className="inline-block text-[8px] px-1.5 py-px ml-1 rounded font-bold align-middle tracking-wider"
-                        style={{ background: "rgba(59,130,246,.2)", color: "var(--t-bl)" }}
-                      >ATM</span>
-                    )}
+                    {row.is_atm && <span className="inline-block text-[8px] px-1.5 py-px ml-1 rounded font-bold align-middle tracking-wider" style={{ background: "rgba(59,130,246,.2)", color: "var(--t-bl)" }}>ATM</span>}
                   </td>
-                  <td className="py-1.5 px-1.5 text-center text-[10px]" style={{ color: "var(--t-tx3)" }}>
-                    {row.pe_ts ? row.pe_lot : "\u2014"}
-                  </td>
-                  <td className="py-1.5 px-1.5 text-center font-mono text-[10px] max-w-[140px] overflow-hidden text-ellipsis whitespace-nowrap" style={{ color: "var(--t-tx3)" }}>
-                    {row.pe_ts || "\u2014"}
-                  </td>
+                  <td className="py-1.5 px-1.5 text-center text-[10px]" style={{ color: "var(--t-tx3)" }}>{row.pe_ts ? row.pe_lot : "\u2014"}</td>
+                  <td className="py-1.5 px-1.5 text-center font-mono text-[10px] max-w-[140px] overflow-hidden text-ellipsis whitespace-nowrap" style={{ color: "var(--t-tx3)" }}>{row.pe_ts || "\u2014"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        {/* BOTTOM PANELS */}
         <div className="grid grid-cols-2 shrink-0" style={{ borderTop: "1px solid var(--t-bd)", maxHeight: "260px" }}>
-          {/* Positions */}
           <div className="flex flex-col overflow-hidden" style={{ borderRight: "1px solid var(--t-bd)" }}>
             <div className="flex items-center justify-between px-3 py-2 shrink-0" style={{ background: "var(--t-sf)", borderBottom: "1px solid var(--t-bd)" }}>
               <div className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: "var(--t-tx2)" }}>
-                &#x1F4CA; Positions
-                <span className="text-[9px] px-1.5 py-px rounded-lg font-semibold" style={{ background: "rgba(59,130,246,.1)", color: "var(--t-bl)" }} data-testid="text-pos-count">
-                  {positions.length}
-                </span>
+                &#x1F4CA; Positions <span className="text-[9px] px-1.5 py-px rounded-lg font-semibold" style={{ background: "rgba(59,130,246,.1)", color: "var(--t-bl)" }} data-testid="text-pos-count">{positions.length}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <button
-                  data-testid="button-close-all"
-                  onClick={closeAllPositions}
-                  className="px-2.5 py-0.5 rounded text-[10px] font-bold transition-all"
-                  style={{ background: "rgba(239,68,68,.08)", color: "var(--t-rd)", border: "1px solid rgba(239,68,68,.15)" }}
-                >&#x2715; Close All</button>
-                <button
-                  data-testid="button-refresh-positions"
-                  onClick={loadPositions}
-                  className="px-2 py-0.5 rounded text-[10px] transition-all"
-                  style={{ background: "transparent", border: "1px solid var(--t-bd)", color: "var(--t-tx3)" }}
-                >&#x21BB;</button>
+                <button data-testid="button-close-all" onClick={closeAllPositions} className="px-2.5 py-0.5 rounded text-[10px] font-bold transition-all" style={{ background: "rgba(239,68,68,.08)", color: "var(--t-rd)", border: "1px solid rgba(239,68,68,.15)" }}>&#x2715; Close All</button>
+                <button data-testid="button-refresh-positions" onClick={loadPositions} className="px-2 py-0.5 rounded text-[10px]" style={{ border: "1px solid var(--t-bd)", color: "var(--t-tx3)" }}>&#x21BB;</button>
               </div>
             </div>
             {positions.length > 0 && (
               <div className="flex items-center gap-2 px-3 py-1 shrink-0 text-[11px]" style={{ background: "var(--t-bg2)", borderBottom: "1px solid var(--t-bd)" }}>
                 <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--t-tx3)" }}>Net P&L</span>
-                <span className={`font-mono font-bold text-[13px] ${totalPnl >= 0 ? "" : ""}`} style={{ color: totalPnl > 0 ? "var(--t-gn)" : totalPnl < 0 ? "var(--t-rd)" : "var(--t-tx3)" }} data-testid="text-total-pnl">
+                <span className="font-mono font-bold text-[13px]" style={{ color: totalPnl > 0 ? "var(--t-gn)" : totalPnl < 0 ? "var(--t-rd)" : "var(--t-tx3)" }} data-testid="text-total-pnl">
                   {totalPnl >= 0 ? "+" : "-"}{"\u20B9"}{Math.abs(totalPnl).toFixed(2)}
                 </span>
               </div>
@@ -756,39 +758,26 @@ export default function Terminal() {
                 const isLong = qty >= 0;
                 const displayQty = buyQty || sellQty || Math.abs(qty);
                 return (
-                  <div key={i} data-testid={`row-position-${i}`} className="grid items-center gap-2 px-3 py-1.5 text-[11px] transition-colors" style={{ gridTemplateColumns: "1fr auto auto auto", borderBottom: "1px solid rgba(36,48,73,.4)" }}>
+                  <div key={i} data-testid={`row-position-${i}`} className="grid items-center gap-2 px-3 py-1.5 text-[11px]" style={{ gridTemplateColumns: "1fr auto auto auto", borderBottom: "1px solid rgba(36,48,73,.4)" }}>
                     <span className="font-mono font-semibold text-[10px] flex items-center gap-1.5">
                       {sym}
-                      <span className="text-[8px] px-1.5 py-px rounded font-semibold" style={isLong ? { background: "rgba(16,185,129,.08)", color: "var(--t-gn)" } : { background: "rgba(239,68,68,.08)", color: "var(--t-rd)" }}>
-                        {isLong ? "LONG" : "SHORT"}
-                      </span>
+                      <span className="text-[8px] px-1.5 py-px rounded font-semibold" style={isLong ? { background: "rgba(16,185,129,.08)", color: "var(--t-gn)" } : { background: "rgba(239,68,68,.08)", color: "var(--t-rd)" }}>{isLong ? "LONG" : "SHORT"}</span>
                     </span>
                     <span className="font-mono text-[10px]" style={{ color: "var(--t-tx2)" }}>Qty: {displayQty}</span>
                     <span className="font-mono text-[10px]" style={{ color: "var(--t-tx3)" }}>@{"\u20B9"}{avgPx}</span>
-                    <span className="font-mono font-semibold text-[11px]" style={{ color: pnl >= 0 ? "var(--t-gn)" : "var(--t-rd)" }}>
-                      {pnl >= 0 ? "+" : "-"}{"\u20B9"}{Math.abs(pnl).toFixed(2)}
-                    </span>
+                    <span className="font-mono font-semibold text-[11px]" style={{ color: pnl >= 0 ? "var(--t-gn)" : "var(--t-rd)" }}>{pnl >= 0 ? "+" : "-"}{"\u20B9"}{Math.abs(pnl).toFixed(2)}</span>
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* Orders */}
           <div className="flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-3 py-2 shrink-0" style={{ background: "var(--t-sf)", borderBottom: "1px solid var(--t-bd)" }}>
               <div className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: "var(--t-tx2)" }}>
-                &#x1F4CB; Orders
-                <span className="text-[9px] px-1.5 py-px rounded-lg font-semibold" style={{ background: "rgba(59,130,246,.1)", color: "var(--t-bl)" }} data-testid="text-ord-count">
-                  {orders.length}
-                </span>
+                &#x1F4CB; Orders <span className="text-[9px] px-1.5 py-px rounded-lg font-semibold" style={{ background: "rgba(59,130,246,.1)", color: "var(--t-bl)" }} data-testid="text-ord-count">{orders.length}</span>
               </div>
-              <button
-                data-testid="button-refresh-orders"
-                onClick={loadOrders}
-                className="px-2 py-0.5 rounded text-[10px] transition-all"
-                style={{ background: "transparent", border: "1px solid var(--t-bd)", color: "var(--t-tx3)" }}
-              >&#x21BB;</button>
+              <button data-testid="button-refresh-orders" onClick={loadOrders} className="px-2 py-0.5 rounded text-[10px]" style={{ border: "1px solid var(--t-bd)", color: "var(--t-tx3)" }}>&#x21BB;</button>
             </div>
             <div className="flex-1 overflow-y-auto py-0.5">
               {orders.length === 0 ? (
@@ -800,18 +789,15 @@ export default function Terminal() {
                 if (st.includes("reject")) stCls = "rejected";
                 else if (st.includes("complete") || st.includes("traded")) stCls = "complete";
                 else if (st.includes("open") || st.includes("trigger")) stCls = "open";
-
                 const fillPx = o.flPrc || o.avgPrc;
                 const ordPx = o.prc;
                 let dispPx = "--";
                 if (fillPx && parseFloat(fillPx) > 0) dispPx = parseFloat(fillPx).toFixed(2);
                 else if (ordPx && parseFloat(ordPx) > 0) dispPx = parseFloat(ordPx).toFixed(2);
                 else dispPx = "MKT";
-
                 const rawT = o.ordTm || o.exTm || o.ordGenTm || "";
                 const tm = rawT.match(/(\d{2}:\d{2}:\d{2})/);
                 const timeStr = tm ? tm[1] : "";
-
                 const statusColors: Record<string, { bg: string; color: string }> = {
                   complete: { bg: "rgba(16,185,129,.08)", color: "var(--t-gn)" },
                   rejected: { bg: "rgba(239,68,68,.08)", color: "var(--t-rd)" },
@@ -819,30 +805,16 @@ export default function Terminal() {
                   pending: { bg: "rgba(59,130,246,.1)", color: "var(--t-bl)" },
                 };
                 const sc = statusColors[stCls] || statusColors.pending;
-
                 return (
-                  <div key={i} data-testid={`row-order-${i}`} className="grid items-center gap-2 px-3 py-1.5 text-[11px] transition-colors" style={{ gridTemplateColumns: "18px 1fr auto auto auto auto", borderBottom: "1px solid rgba(36,48,73,.4)" }}>
-                    <div
-                      className="w-[18px] h-[18px] rounded flex items-center justify-center text-[10px] font-bold shrink-0"
-                      style={isBuy ? { background: "rgba(16,185,129,.08)", color: "var(--t-gn)" } : { background: "rgba(239,68,68,.08)", color: "var(--t-rd)" }}
-                    >{isBuy ? "B" : "S"}</div>
+                  <div key={i} data-testid={`row-order-${i}`} className="grid items-center gap-2 px-3 py-1.5 text-[11px]" style={{ gridTemplateColumns: "18px 1fr auto auto auto auto", borderBottom: "1px solid rgba(36,48,73,.4)" }}>
+                    <div className="w-[18px] h-[18px] rounded flex items-center justify-center text-[10px] font-bold shrink-0" style={isBuy ? { background: "rgba(16,185,129,.08)", color: "var(--t-gn)" } : { background: "rgba(239,68,68,.08)", color: "var(--t-rd)" }}>{isBuy ? "B" : "S"}</div>
                     <span className="font-mono font-medium text-[10px] overflow-hidden text-ellipsis whitespace-nowrap">{o.trdSym}</span>
                     <span className="font-mono font-semibold text-[10px]" style={{ color: "var(--t-yw)" }}>{dispPx}</span>
                     <span className="font-mono text-[10px]" style={{ color: "var(--t-tx2)" }}>{o.qty}</span>
-                    <span
-                      className="text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider whitespace-nowrap"
-                      style={{ background: sc.bg, color: sc.color }}
-                    >{o.ordSt}</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider whitespace-nowrap" style={{ background: sc.bg, color: sc.color }}>{o.ordSt}</span>
                     {stCls === "open" ? (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); cancelOrd(o.nOrdNo); }}
-                        className="px-2 py-0.5 rounded text-[9px] font-semibold transition-all"
-                        style={{ background: "rgba(239,68,68,.08)", color: "var(--t-rd)", border: "1px solid rgba(239,68,68,.15)" }}
-                        data-testid={`button-cancel-order-${i}`}
-                      >&#x2715;</button>
-                    ) : timeStr ? (
-                      <span className="font-mono text-[9px]" style={{ color: "var(--t-tx3)" }}>{timeStr}</span>
-                    ) : <span />}
+                      <button onClick={(e) => { e.stopPropagation(); cancelOrd(o.nOrdNo); }} className="px-2 py-0.5 rounded text-[9px] font-semibold" style={{ background: "rgba(239,68,68,.08)", color: "var(--t-rd)", border: "1px solid rgba(239,68,68,.15)" }} data-testid={`button-cancel-order-${i}`}>&#x2715;</button>
+                    ) : timeStr ? <span className="font-mono text-[9px]" style={{ color: "var(--t-tx3)" }}>{timeStr}</span> : <span />}
                   </div>
                 );
               })}
@@ -852,6 +824,22 @@ export default function Terminal() {
       </div>
 
       <ToastContainer toasts={toasts} />
+    </div>
+  );
+}
+
+function CredInput({ label, value, onChange, type = "text", ...props }: { label: string; value: string; onChange: (v: string) => void; type?: string; [key: string]: any }) {
+  return (
+    <div className="mb-2.5 text-left">
+      <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--t-tx3)" }}>{label}</label>
+      <input
+        {...props}
+        type={type}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="w-full p-2.5 rounded-lg text-sm outline-none transition-all font-mono"
+        style={{ background: "var(--t-bg)", border: "1px solid var(--t-bd)", color: "var(--t-tx)" }}
+      />
     </div>
   );
 }
@@ -874,30 +862,16 @@ function CtrlGroup({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-function ActionButton({ variant, disabled, onClick, children, ...props }: {
-  variant: "buy" | "sell";
-  disabled?: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-  [key: string]: any;
-}) {
-  const bg = variant === "buy"
-    ? "linear-gradient(135deg, #10b981 0%, #059669 100%)"
-    : "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)";
-
+function ActionButton({ variant, disabled, onClick, children, ...props }: { variant: "buy" | "sell"; disabled?: boolean; onClick: () => void; children: React.ReactNode; [key: string]: any }) {
+  const bg = variant === "buy" ? "linear-gradient(135deg, #10b981 0%, #059669 100%)" : "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)";
   return (
     <button
       {...props}
       onClick={onClick}
       disabled={disabled}
       className="py-2 px-5 rounded-md font-mono text-[11px] font-bold text-white tracking-wider flex items-center justify-center gap-1.5 transition-all whitespace-nowrap min-w-[112px] disabled:opacity-25 disabled:cursor-not-allowed"
-      style={{
-        background: bg,
-        boxShadow: disabled ? "none" : "0 1px 3px rgba(0,0,0,.3), 0 1px 2px rgba(0,0,0,.2)",
-      }}
-    >
-      {children}
-    </button>
+      style={{ background: bg, boxShadow: disabled ? "none" : "0 1px 3px rgba(0,0,0,.3), 0 1px 2px rgba(0,0,0,.2)" }}
+    >{children}</button>
   );
 }
 
@@ -908,18 +882,12 @@ function ToastContainer({ toasts }: { toasts: ToastItem[] }) {
     error: { bg: "rgba(239,68,68,.15)", color: "var(--t-rd)", border: "rgba(239,68,68,.15)" },
     info: { bg: "rgba(59,130,246,.15)", color: "var(--t-bl)", border: "rgba(59,130,246,.2)" },
   };
-
   return (
     <div className="fixed bottom-4 right-4 z-[999] flex flex-col-reverse gap-1.5">
       {toasts.map(t => {
         const s = styles[t.type] || styles.info;
         return (
-          <div
-            key={t.id}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium max-w-[360px] animate-toast-in backdrop-blur-sm"
-            style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}`, boxShadow: "0 4px 12px rgba(0,0,0,.4)" }}
-            data-testid={`toast-${t.type}`}
-          >
+          <div key={t.id} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium max-w-[360px] animate-toast-in backdrop-blur-sm" style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}`, boxShadow: "0 4px 12px rgba(0,0,0,.4)" }} data-testid={`toast-${t.type}`}>
             <span className="text-sm shrink-0">{icons[t.type]}</span>
             <span className="flex-1">{t.msg}</span>
           </div>

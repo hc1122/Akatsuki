@@ -1,20 +1,29 @@
 # Kotak Scalper Terminal
 
 ## Overview
-Professional options scalping terminal for Kotak Securities NEO API. Dark terminal UI with real-time option chain display, one-click order placement, position tracking, and WebSocket-based updates.
+Multi-user options scalping terminal for Kotak Securities NEO API. Dark terminal UI with real-time option chain display, one-click order placement, position tracking, and WebSocket-based updates. Supports multiple traders with independent Kotak sessions.
 
 ## Architecture
 - **Frontend**: React 18 + Tailwind CSS + Wouter routing
-- **Backend**: Node.js/Express + WebSocket (ws)
-- **No database** - all trading data is in-memory via Kotak API calls
-- **In-memory options DB** - CSV scrip master downloaded from Kotak, parsed into memory
+- **Backend**: Node.js/Express + WebSocket (ws) + express-session
+- **Database**: PostgreSQL (Drizzle ORM) - `traders` table for user accounts + encrypted Kotak credentials
+- **Per-user sessions**: `Map<userId, KotakSession>` in memory for active trading sessions
+- **In-memory options DB** - CSV scrip master downloaded from Kotak, parsed into memory (shared across users)
+
+## Auth Flow
+1. **Register/Login**: Email + password (SHA-256 hashed)
+2. **Save Credentials** (first time only): Access Token, Mobile Number, MPIN, UCC saved to DB
+3. **TOTP Connect**: 6-digit TOTP from authenticator app → Kotak API login → trading session
+4. **Subsequent logins**: Email/password → TOTP only (credentials already saved)
 
 ## Key Files
-- `server/kotak.ts` - Kotak Securities NEO API client (auth, orders, quotes)
+- `server/kotak.ts` - Per-user Kotak API client (session map, auth, orders, quotes)
 - `server/optionsDb.ts` - In-memory options database (CSV download, parse, chain queries)
-- `server/routes.ts` - Express API routes + WebSocket server at `/ws`
-- `shared/schema.ts` - TypeScript interfaces + minimal drizzle schema (users table kept for compatibility)
-- `client/src/pages/terminal.tsx` - Main terminal page with all trading UI
+- `server/routes.ts` - Express API routes + WebSocket + auth middleware
+- `server/storage.ts` - Database CRUD for traders table
+- `server/db.ts` - Drizzle PostgreSQL connection
+- `shared/schema.ts` - Drizzle schema (traders table) + TypeScript interfaces
+- `client/src/pages/terminal.tsx` - Full terminal: auth screens + trading UI
 - `client/src/index.css` - Dark terminal theme with CSS variables (--t-* prefix)
 
 ## Speed Optimizations
@@ -24,12 +33,22 @@ Professional options scalping terminal for Kotak Securities NEO API. Dark termin
 - **Toast shows execution time**: Order result toast includes Kotak API round-trip time in ms.
 
 ## API Endpoints
-- `POST /api/login` - TOTP + MPIN login
-- `GET /api/session` - Check login status
+### Auth
+- `POST /api/auth/register` - Create account (email, password)
+- `POST /api/auth/login` - Login (email, password) → returns hasCredentials flag
+- `POST /api/auth/credentials` - Save Kotak API credentials (first time)
+- `GET /api/auth/session` - Check auth + Kotak connection status
+- `POST /api/auth/logout` - Logout + disconnect Kotak
+
+### Kotak
+- `POST /api/kotak/connect` - TOTP login to Kotak
+- `POST /api/kotak/disconnect` - Disconnect Kotak session
+
+### Trading
 - `GET /api/spot/:idx` - Get spot price (NIFTY/BANKNIFTY/SENSEX)
 - `GET /api/expiries/:idx` - Get expiry list
 - `GET /api/option-chain/:idx` - Get option chain data
-- `POST /api/order/fast` - Fire-and-forget order (pre-built jData, instant response, result via WebSocket)
+- `POST /api/order/fast` - Fire-and-forget order (pre-built jData)
 - `POST /api/order/quick` - Place order synchronously (fallback)
 - `POST /api/order/cancel` - Cancel order
 - `GET /api/orderbook` - Get order book
@@ -37,14 +56,10 @@ Professional options scalping terminal for Kotak Securities NEO API. Dark termin
 - `GET /api/limits` - Get account limits
 - `POST /api/order/close-all` - Close all positions
 - `POST /api/reload/:idx` - Reload instruments
-- `POST /api/logout` - Logout
 
 ## Environment Secrets
-- `ACCESS_TOKEN` - Kotak API access token
-- `MOBILE_NUMBER` - Registered mobile number
-- `MPIN` - Trading MPIN
-- `UCC` - Unique Client Code
 - `SESSION_SECRET` - Express session secret
+- (Per-user: ACCESS_TOKEN, MOBILE_NUMBER, MPIN, UCC stored in DB)
 
 ## Keyboard Shortcuts
 - `1` or `Numpad1` - BUY CE
@@ -58,3 +73,4 @@ Professional options scalping terminal for Kotak Securities NEO API. Dark termin
 - Green (#10b981) for buy/profit, Red (#ef4444) for sell/loss
 - Blue (#3b82f6) for accents, Yellow (#f59e0b) for strike prices
 - WebSocket real-time updates with status indicator
+- Multi-step auth screens with same dark aesthetic

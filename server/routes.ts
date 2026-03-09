@@ -1,49 +1,76 @@
-import type { Express } from "express";
-import { type Server } from "http";
+import type { Express, Request, Response } from "express";
+import { type Server, IncomingMessage } from "http";
 import { WebSocketServer, WebSocket } from "ws";
+import session from "express-session";
 import * as kotak from "./kotak";
 import * as optionsDb from "./optionsDb";
+import * as storage from "./storage";
 import { log } from "./index";
 
-const wsClients: WebSocket[] = [];
+declare module "express-session" {
+  interface SessionData {
+    traderId?: string;
+    kotakLoggedIn?: boolean;
+  }
+}
 
-function broadcast(msg: object) {
+const wsClients = new Map<string, WebSocket[]>();
+
+function broadcastToUser(userId: string, msg: object) {
   const data = JSON.stringify(msg);
+  const clients = wsClients.get(userId) || [];
   const dead: WebSocket[] = [];
-  for (const ws of wsClients) {
+  for (const ws of clients) {
     try {
       if (ws.readyState === WebSocket.OPEN) ws.send(data);
       else dead.push(ws);
     } catch { dead.push(ws); }
   }
   for (const ws of dead) {
-    const idx = wsClients.indexOf(ws);
-    if (idx >= 0) wsClients.splice(idx, 1);
+    const idx = clients.indexOf(ws);
+    if (idx >= 0) clients.splice(idx, 1);
   }
 }
 
-let spotInterval: ReturnType<typeof setInterval> | null = null;
+function requireAuth(req: Request, res: Response): string | null {
+  const traderId = req.session?.traderId;
+  if (!traderId) { res.status(401).json({ error: "Not authenticated" }); return null; }
+  return traderId;
+}
 
-function startSpotCache() {
-  if (spotInterval) clearInterval(spotInterval);
-  spotInterval = setInterval(async () => {
-    if (!kotak.sessionState.loggedIn) return;
+function requireKotak(req: Request, res: Response): kotak.KotakSession | null {
+  const traderId = requireAuth(req, res);
+  if (!traderId) return null;
+  const s = kotak.getSession(traderId);
+  if (!s || !s.loggedIn) { res.status(401).json({ error: "Kotak not connected" }); return null; }
+  return s;
+}
+
+const spotIntervals = new Map<string, ReturnType<typeof setInterval>>();
+
+function startSpotCache(userId: string) {
+  if (spotIntervals.has(userId)) clearInterval(spotIntervals.get(userId)!);
+  spotIntervals.set(userId, setInterval(async () => {
+    const s = kotak.getSession(userId);
+    if (!s || !s.loggedIn) { clearInterval(spotIntervals.get(userId)!); spotIntervals.delete(userId); return; }
     for (const idx of ["NIFTY", "BANKNIFTY", "SENSEX"]) {
       try {
-        const price = await kotak.getSpot(idx);
+        const price = await kotak.getSpot(s, idx);
         if (price > 0) optionsDb.setCachedSpot(idx, price);
       } catch { /* skip */ }
     }
-  }, 2000);
+  }, 2000));
 }
 
-async function preload() {
+async function preload(userId: string) {
+  const s = kotak.getSession(userId);
+  if (!s || !s.loggedIn) return;
   await new Promise(r => setTimeout(r, 500));
   for (const idx of ["NIFTY", "BANKNIFTY", "SENSEX"]) {
     try {
-      await optionsDb.downloadCsv(idx);
+      await optionsDb.downloadCsv(idx, s);
       optionsDb.buildOptionsDb(idx);
-      broadcast({ type: "instruments_ready", index: idx });
+      broadcastToUser(userId, { type: "instruments_ready", index: idx });
     } catch (e: any) {
       log(`${idx} preload error: ${e.message}`, "preload");
     }
@@ -56,28 +83,170 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  const sessionSecret = process.env.SESSION_SECRET || "kotak-scalper-secret-2025";
+  const sessionMiddleware = session({
+    secret: sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: 24 * 60 * 60 * 1000,
+      httpOnly: true,
+      sameSite: "lax",
+    },
+  });
+  app.use(sessionMiddleware);
+
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
-  wss.on("connection", (ws) => {
-    wsClients.push(ws);
-    ws.on("close", () => {
-      const idx = wsClients.indexOf(ws);
-      if (idx >= 0) wsClients.splice(idx, 1);
+  wss.on("connection", (ws, req) => {
+    let userId = "";
+
+    sessionMiddleware(req as any, {} as any, () => {
+      const sess = (req as any).session;
+      if (sess?.traderId) {
+        userId = sess.traderId;
+        const clients = wsClients.get(userId) || [];
+        clients.push(ws);
+        wsClients.set(userId, clients);
+      }
     });
+
     ws.on("message", () => {});
+
+    ws.on("close", () => {
+      if (!userId) return;
+      const clients = wsClients.get(userId) || [];
+      const idx = clients.indexOf(ws);
+      if (idx >= 0) clients.splice(idx, 1);
+    });
   });
 
-  app.post("/api/login", async (req, res) => {
+  app.post("/api/auth/register", async (req, res) => {
     try {
-      const { totp } = req.body;
-      if (!totp) return res.status(400).json({ status: "error", message: "TOTP required" });
+      const { email, password } = req.body;
+      if (!email || !password) return res.status(400).json({ status: "error", message: "Email and password required" });
+      if (password.length < 6) return res.status(400).json({ status: "error", message: "Password must be at least 6 characters" });
 
-      const r1 = await kotak.loginWithTotp(totp);
-      if (r1.status !== "success") return res.json(r1);
+      const existing = await storage.getTraderByEmail(email);
+      if (existing) return res.status(400).json({ status: "error", message: "Email already registered" });
 
-      const r2 = await kotak.validateMpin();
+      const trader = await storage.createTrader(email, password);
+      req.session.traderId = trader.id;
+      res.json({ status: "success", hasCredentials: false, traderId: trader.id });
+    } catch (e: any) {
+      log(`Register error: ${e.message}`, "auth");
+      res.status(500).json({ status: "error", message: "Registration failed" });
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) return res.status(400).json({ status: "error", message: "Email and password required" });
+
+      const trader = await storage.getTraderByEmail(email);
+      if (!trader) return res.status(401).json({ status: "error", message: "Invalid email or password" });
+
+      if (!(await storage.verifyPassword(password, trader.passwordHash))) {
+        return res.status(401).json({ status: "error", message: "Invalid email or password" });
+      }
+
+      req.session.traderId = trader.id;
+      res.json({
+        status: "success",
+        hasCredentials: !!trader.hasCredentials,
+        email: trader.email,
+        traderId: trader.id,
+      });
+    } catch (e: any) {
+      log(`Login error: ${e.message}`, "auth");
+      res.status(500).json({ status: "error", message: "Login failed" });
+    }
+  });
+
+  app.post("/api/auth/credentials", async (req, res) => {
+    const traderId = requireAuth(req, res);
+    if (!traderId) return;
+
+    const { accessToken, mobileNumber, mpin, ucc } = req.body;
+    if (!accessToken || !mobileNumber || !mpin || !ucc) {
+      return res.status(400).json({ status: "error", message: "All credential fields required" });
+    }
+
+    try {
+      await storage.saveKotakCredentials(traderId, { accessToken, mobileNumber, mpin, ucc });
+      res.json({ status: "success" });
+    } catch (e: any) {
+      log(`Save credentials error: ${e.message}`, "auth");
+      res.status(500).json({ status: "error", message: "Failed to save credentials" });
+    }
+  });
+
+  app.get("/api/auth/session", async (req, res) => {
+    const traderId = req.session?.traderId;
+    if (!traderId) return res.json({ authenticated: false });
+
+    const trader = await storage.getTraderById(traderId);
+    if (!trader) return res.json({ authenticated: false });
+
+    const kotakSession = kotak.getSession(traderId);
+    res.json({
+      authenticated: true,
+      email: trader.email,
+      hasCredentials: !!trader.hasCredentials,
+      kotakConnected: kotakSession?.loggedIn || false,
+      greeting: kotakSession?.greetingName || "",
+      traderId: trader.id,
+    });
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    const traderId = req.session?.traderId;
+    if (traderId) {
+      const s = kotak.getSession(traderId);
+      if (s) kotak.logoutSession(s);
+      kotak.removeSession(traderId);
+      if (spotIntervals.has(traderId)) {
+        clearInterval(spotIntervals.get(traderId)!);
+        spotIntervals.delete(traderId);
+      }
+    }
+    req.session.destroy(() => {});
+    res.json({ status: "success" });
+  });
+
+  app.post("/api/kotak/connect", async (req, res) => {
+    const traderId = requireAuth(req, res);
+    if (!traderId) return;
+
+    const { totp } = req.body;
+    if (!totp) return res.status(400).json({ status: "error", message: "TOTP required" });
+
+    try {
+      const trader = await storage.getTraderById(traderId);
+      if (!trader || !trader.hasCredentials) {
+        return res.json({ status: "error", message: "Kotak credentials not configured" });
+      }
+
+      const creds = storage.decryptCredentials(trader);
+      if (!creds) {
+        return res.json({ status: "error", message: "Failed to decrypt credentials" });
+      }
+
+      const s = kotak.createSession(traderId, creds);
+
+      const r1 = await kotak.loginWithTotp(s, totp);
+      if (r1.status !== "success") {
+        kotak.removeSession(traderId);
+        return res.json(r1);
+      }
+
+      const r2 = await kotak.validateMpin(s);
       if (r2.status === "success") {
-        startSpotCache();
-        preload();
+        req.session.kotakLoggedIn = true;
+        startSpotCache(traderId);
+        preload(traderId);
+      } else {
+        kotak.removeSession(traderId);
       }
       return res.json(r2);
     } catch (e: any) {
@@ -85,59 +254,72 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/session", (_req, res) => {
-    res.json({ logged_in: kotak.sessionState.loggedIn, greeting: kotak.sessionState.greetingName });
+  app.post("/api/kotak/disconnect", (req, res) => {
+    const traderId = requireAuth(req, res);
+    if (!traderId) return;
+
+    const s = kotak.getSession(traderId);
+    if (s) kotak.logoutSession(s);
+    kotak.removeSession(traderId);
+    req.session.kotakLoggedIn = false;
+    if (spotIntervals.has(traderId)) {
+      clearInterval(spotIntervals.get(traderId)!);
+      spotIntervals.delete(traderId);
+    }
+    res.json({ status: "success" });
   });
 
   app.get("/api/spot/:idx", async (req, res) => {
-    if (!kotak.sessionState.loggedIn) return res.status(401).json({ error: "Not logged in" });
+    const s = requireKotak(req, res);
+    if (!s) return;
     const idx = req.params.idx.toUpperCase();
     let price = optionsDb.getCachedSpot(idx);
     if (price <= 0) {
-      price = await kotak.getSpot(idx);
+      price = await kotak.getSpot(s, idx);
       if (price > 0) optionsDb.setCachedSpot(idx, price);
     }
     res.json({ index: idx, spot: price });
   });
 
-  app.get("/api/expiries/:idx", (_req, res) => {
-    if (!kotak.sessionState.loggedIn) return res.status(401).json({ error: "Not logged in" });
-    res.json(optionsDb.getExpiries(_req.params.idx));
+  app.get("/api/expiries/:idx", (req, res) => {
+    const s = requireKotak(req, res);
+    if (!s) return;
+    res.json(optionsDb.getExpiries(req.params.idx));
   });
 
   app.get("/api/option-chain/:idx", async (req, res) => {
-    if (!kotak.sessionState.loggedIn) return res.status(401).json({ error: "Not logged in" });
+    const s = requireKotak(req, res);
+    if (!s) return;
     const idx = req.params.idx.toUpperCase();
     const strikes = parseInt(req.query.strikes as string) || 5;
     const expiry = (req.query.expiry as string) || "";
 
     let price = optionsDb.getCachedSpot(idx);
-    if (price <= 0) price = await kotak.getSpot(idx);
+    if (price <= 0) price = await kotak.getSpot(s, idx);
     if (price <= 0) return res.json({ error: "No spot price" });
 
-    const t0 = Date.now();
     const result = optionsDb.queryChainFast(idx, price, strikes, expiry);
-    log(`Chain query: ${Date.now() - t0}ms`, "chain");
     res.json(result);
   });
 
   app.post("/api/order/fast", (req, res) => {
-    if (!kotak.sessionState.loggedIn) return res.status(401).json({ error: "Not logged in" });
+    const s = requireKotak(req, res);
+    if (!s) return;
     const { jData, action } = req.body;
     if (!jData) return res.status(400).json({ error: "Missing jData" });
+    const userId = s.userId;
 
-    const sentAt = Date.now();
-    res.json({ status: "sent", ts: sentAt });
+    res.json({ status: "sent", ts: Date.now() });
 
     (async () => {
       try {
         const t0 = Date.now();
-        const result = await fetch(`${kotak.sessionState.baseUrl}/quick/order/rule/ms/place`, {
+        const result = await fetch(`${s.baseUrl}/quick/order/rule/ms/place`, {
           method: "POST",
           headers: {
             "accept": "application/json",
-            "Auth": kotak.sessionState.sessionToken!,
-            "Sid": kotak.sessionState.sessionSid!,
+            "Auth": s.sessionToken!,
+            "Sid": s.sessionSid!,
             "neo-fin-key": "neotradeapi",
             "Content-Type": "application/x-www-form-urlencoded",
           },
@@ -145,97 +327,97 @@ export async function registerRoutes(
         });
         const data = await result.json() as any;
         const elapsed = Date.now() - t0;
-        log(`FAST ORDER ${elapsed}ms: ${JSON.stringify(data)}`, "order");
+        log(`FAST ORDER ${elapsed}ms [${userId}]: ${JSON.stringify(data)}`, "order");
 
         if (data.stat === "Not_Ok" && ((data.errMsg || "") + (data.emsg || "")).includes("LTP")) {
-          log(`MKT rejected, retrying limit...`, "order");
           try {
             const parsed = JSON.parse(jData);
-            const seg = parsed.es;
-            const ts = parsed.ts;
-            const tt = parsed.tt;
-            const qty = parsed.qt;
-            const q = await kotak.fetchQuote(seg, ts, "ltp");
+            const q = await kotak.fetchQuote(s, parsed.es, parsed.ts, "ltp");
             const ltp = parseFloat(q?.ltp || "0");
             if (ltp > 0) {
-              const pr = (ltp * (tt === "B" ? 1.002 : 0.998)).toFixed(2);
+              const pr = (ltp * (parsed.tt === "B" ? 1.002 : 0.998)).toFixed(2);
               const limitData = JSON.stringify({ ...parsed, pt: "L", pr });
-              const r2 = await fetch(`${kotak.sessionState.baseUrl}/quick/order/rule/ms/place`, {
+              const r2 = await fetch(`${s.baseUrl}/quick/order/rule/ms/place`, {
                 method: "POST",
                 headers: {
                   "accept": "application/json",
-                  "Auth": kotak.sessionState.sessionToken!,
-                  "Sid": kotak.sessionState.sessionSid!,
+                  "Auth": s.sessionToken!,
+                  "Sid": s.sessionSid!,
                   "neo-fin-key": "neotradeapi",
                   "Content-Type": "application/x-www-form-urlencoded",
                 },
                 body: `jData=${limitData}`,
               });
               const d2 = await r2.json() as any;
-              broadcast({ type: "order_result", data: d2, action: action || "", elapsed });
+              broadcastToUser(userId, { type: "order_result", data: d2, action: action || "", elapsed });
               return;
             }
           } catch {}
         }
 
-        broadcast({ type: "order_result", data, action: action || "", elapsed });
+        broadcastToUser(userId, { type: "order_result", data, action: action || "", elapsed });
       } catch (e: any) {
         log(`FAST ORDER error: ${e.message}`, "order");
-        broadcast({ type: "order_result", data: { stat: "Not_Ok", emsg: e.message }, action: action || "", elapsed: -1 });
+        broadcastToUser(userId, { type: "order_result", data: { stat: "Not_Ok", emsg: e.message }, action: action || "", elapsed: -1 });
       }
     })();
   });
 
   app.post("/api/order/quick", async (req, res) => {
-    if (!kotak.sessionState.loggedIn) return res.status(401).json({ error: "Not logged in" });
+    const s = requireKotak(req, res);
+    if (!s) return;
     const { tt, ts, es, lot, symbol } = req.body;
     if (!tt || !ts || !es) return res.json({ stat: "Not_Ok", emsg: "Missing params" });
 
     const qty = parseInt(lot) || 1;
-    let r = await kotak.placeOrder(es, ts, tt, qty);
+    let r = await kotak.placeOrder(s, es, ts, tt, qty);
 
     if (r.stat === "Not_Ok" && ((r.errMsg || "") + (r.emsg || "")).includes("LTP")) {
-      log(`MKT rejected, trying limit for ${ts}...`, "order");
       if (symbol && es) {
-        const q = await kotak.fetchQuote(es, symbol, "ltp");
+        const q = await kotak.fetchQuote(s, es, symbol, "ltp");
         const ltp = parseFloat(q?.ltp || "0");
         if (ltp > 0) {
           const pr = (ltp * (tt === "B" ? 1.002 : 0.998)).toFixed(2);
-          r = await kotak.placeOrder(es, ts, tt, qty, "MIS", "L", pr);
+          r = await kotak.placeOrder(s, es, ts, tt, qty, "MIS", "L", pr);
         }
       }
     }
 
-    broadcast({ type: "order_update", data: r, action: `${tt === "B" ? "BUY" : "SELL"} ${ts} x${qty}` });
+    broadcastToUser(s.userId, { type: "order_update", data: r, action: `${tt === "B" ? "BUY" : "SELL"} ${ts} x${qty}` });
     res.json(r);
   });
 
   app.post("/api/order/cancel", async (req, res) => {
-    if (!kotak.sessionState.loggedIn) return res.status(401).json({ error: "Not logged in" });
-    const r = await kotak.cancelOrder(req.body.on);
-    broadcast({ type: "order_cancelled", data: r });
+    const s = requireKotak(req, res);
+    if (!s) return;
+    const r = await kotak.cancelOrder(s, req.body.on);
+    broadcastToUser(s.userId, { type: "order_cancelled", data: r });
     res.json(r);
   });
 
-  app.get("/api/orderbook", async (_req, res) => {
-    if (!kotak.sessionState.loggedIn) return res.status(401).json({ error: "Not logged in" });
-    res.json(await kotak.getOrderbook());
+  app.get("/api/orderbook", async (req, res) => {
+    const s = requireKotak(req, res);
+    if (!s) return;
+    res.json(await kotak.getOrderbook(s));
   });
 
-  app.get("/api/positions", async (_req, res) => {
-    if (!kotak.sessionState.loggedIn) return res.status(401).json({ error: "Not logged in" });
-    res.json(await kotak.getPositions());
+  app.get("/api/positions", async (req, res) => {
+    const s = requireKotak(req, res);
+    if (!s) return;
+    res.json(await kotak.getPositions(s));
   });
 
-  app.get("/api/limits", async (_req, res) => {
-    if (!kotak.sessionState.loggedIn) return res.status(401).json({ error: "Not logged in" });
-    res.json(await kotak.getLimits());
+  app.get("/api/limits", async (req, res) => {
+    const s = requireKotak(req, res);
+    if (!s) return;
+    res.json(await kotak.getLimits(s));
   });
 
-  app.post("/api/order/close-all", async (_req, res) => {
-    if (!kotak.sessionState.loggedIn) return res.status(401).json({ error: "Not logged in" });
+  app.post("/api/order/close-all", async (req, res) => {
+    const s = requireKotak(req, res);
+    if (!s) return;
     try {
-      const posResp: any = await kotak.getPositions();
+      const posResp: any = await kotak.getPositions(s);
       if (posResp.stat !== "Ok" || !posResp.data?.length) {
         return res.json({ status: "error", message: "No positions to close" });
       }
@@ -248,10 +430,10 @@ export async function registerRoutes(
         const tt = netQty > 0 ? "S" : "B";
         const qty = Math.abs(netQty);
         if (!ts || !es) continue;
-        const r = await kotak.placeOrder(es, ts, tt, qty);
+        const r = await kotak.placeOrder(s, es, ts, tt, qty);
         results.push({ symbol: ts, qty, side: tt, result: r });
       }
-      broadcast({ type: "close_all", count: results.length });
+      broadcastToUser(s.userId, { type: "close_all", count: results.length });
       res.json({ status: "ok", closed: results.length, results });
     } catch (e: any) {
       res.json({ status: "error", message: e.message });
@@ -259,23 +441,17 @@ export async function registerRoutes(
   });
 
   app.post("/api/reload/:idx", async (req, res) => {
-    if (!kotak.sessionState.loggedIn) return res.status(401).json({ error: "Not logged in" });
+    const s = requireKotak(req, res);
+    if (!s) return;
     const key = req.params.idx.toUpperCase();
     try {
-      await optionsDb.downloadCsv(key);
+      await optionsDb.downloadCsv(key, s);
       optionsDb.buildOptionsDb(key);
-      broadcast({ type: "instruments_ready", index: key });
+      broadcastToUser(s.userId, { type: "instruments_ready", index: key });
       res.json({ status: "ok", index: key });
     } catch (e: any) {
       res.json({ status: "error", message: e.message });
     }
-  });
-
-  app.post("/api/logout", (_req, res) => {
-    kotak.logout();
-    optionsDb.clearAll();
-    if (spotInterval) { clearInterval(spotInterval); spotInterval = null; }
-    res.json({ status: "success" });
   });
 
   return httpServer;

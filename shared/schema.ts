@@ -1,21 +1,27 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+export const traders = pgTable("traders", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  accessToken: text("access_token"),
+  mobileNumber: text("mobile_number"),
+  mpin: text("mpin"),
+  ucc: text("ucc"),
+  hasCredentials: boolean("has_credentials").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export const insertTraderSchema = createInsertSchema(traders).pick({
+  email: true,
+}).extend({
+  password: z.string().min(6),
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export type InsertTrader = z.infer<typeof insertTraderSchema>;
+export type Trader = typeof traders.$inferSelect;
 
 export interface OptionEntry {
   ts: string;
