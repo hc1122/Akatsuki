@@ -441,9 +441,17 @@ export default function Terminal() {
     return buyQ - sellQ;
   };
   const getPnl = (p: any) => {
+    const netQ = getNetQty(p);
+    if (netQ !== 0) {
+      if (p.urmtom !== undefined && p.urmtom !== "") return parseFloat(p.urmtom);
+      if (p.unrealizedMTOM !== undefined) return parseFloat(p.unrealizedMTOM);
+      if (p.mtom !== undefined && p.mtom !== "") return parseFloat(p.mtom);
+    }
+    if (p.realisedprofit !== undefined && p.realisedprofit !== "") return parseFloat(p.realisedprofit);
+    if (p.realizedMTOM !== undefined) return parseFloat(p.realizedMTOM);
     const ba = parseFloat(p.buyAmt ?? p.cfBuyAmt ?? 0);
     const sa = parseFloat(p.sellAmt ?? p.cfSellAmt ?? 0);
-    return parseFloat(p.unrealizedMTOM ?? p.realizedMTOM ?? String(sa - ba));
+    return sa - ba;
   };
 
   const openPositions = positions.filter(p => getNetQty(p) !== 0);
