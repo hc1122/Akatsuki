@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>AKATSUKI - Options Scalping Terminal</title>
+<meta name="description" content="AKATSUKI - Professional Options Scalping Terminal for Kotak Securities">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+--t-bg:#06080d;--t-bg2:#0c1019;--t-sf:#111827;--t-sf2:#1a2332;--t-sf3:#1f2b3d;
+--t-bd:#243049;--t-bd2:#2d3d5c;--t-tx:#e2e8f0;--t-tx2:#94a3b8;--t-tx3:#64748b;
+--t-gn:#10b981;--t-gn2:#059669;--t-rd:#ef4444;--t-rd2:#dc2626;
+--t-bl:#3b82f6;--t-bl2:#2563eb;--t-yw:#f59e0b;--t-vl:#8b5cf6;
+}
+html,body{height:100%;overflow:hidden;font-family:'Inter',system-ui,sans-serif;background:var(--t-bg);color:var(--t-tx)}
+input,select,button,textarea{font-family:inherit}
+.font-mono{font-family:'JetBrains Mono',monospace}
+.animate-fade-in{animation:fadeIn .3s ease-out}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes toastIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.animate-toast-in{animation:toastIn .25s ease-out}
+.animate-pulse-dot{animation:pulse 2s infinite}
+.animate-spin{animation:spin 1s linear infinite}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+.ctrl-select{background:var(--t-bg);border:1px solid var(--t-bd);color:var(--t-tx);padding:4px 8px;border-radius:6px;font-size:11px;outline:none;font-family:'JetBrains Mono',monospace;cursor:pointer}
+.ctrl-select:focus{border-color:var(--t-bl)}
+input:focus{border-color:var(--t-bl)!important}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--t-bg)}
+::-webkit-scrollbar-thumb{background:var(--t-bd);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--t-bd2)}
+table{border-collapse:collapse;width:100%}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+const h = (tag, cls, attrs, ...children) => {
+  const el = document.createElement(tag);
+  if (cls) el.className = cls;
+  if (attrs) Object.entries(attrs).forEach(([k,v]) => {
+    if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2).toLowerCase(), v);
+    else if (k === 'disabled') { if (v) el.disabled = true; }
+    else el.setAttribute(k, v);
+  });
+  children.flat().forEach(c => {
+    if (c == null) return;
+    el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  });
+  return el;
+};
+const html = (s) => { const t = document.createElement('template'); t.innerHTML = s.trim(); return t.content.firstChild; };
+
+let state = {
+  authStep: 'login', authEmail: '', authPassword: '', authLoading: false, isRegister: false, traderId: '',
+  credAccessToken: '', credMobile: '', credMpin: '', credUcc: '', credSaving: false,
+  greeting: '', totp: '', loggingIn: false,
+  currentIndex: 'NIFTY', expiries: [], selectedExpiry: '', numStrikes: 5, spotPrice: 0,
+  chain: [], chainLoading: false, showChain: false, showPositions: false, showOrders: false,
+  selectedStrike: null, selectedIdx: -1, lots: 1,
+  positions: [], orders: [], funds: {available:'--',used:'--',collateral:'--'},
+  liveLtps: {}, wsConnected: false, toasts: [], clock: '',
+};
+
+let toastId = 0;
+let ws = null, pingIv = null, reconnectTimeout = null, spotIv = null, posIv = null, limitsIv = null, ltpIv = null, clockIv = null;
+let precomputed = {};
+
+function addToast(msg, type='info') {
+  const id = ++toastId;
+  state.toasts = [...state.toasts.slice(-4), {id, msg, type}];
+  renderToasts();
+  setTimeout(() => { state.toasts = state.toasts.filter(t => t.id !== id); renderToasts(); }, 4000);
+}
+
+function fmtPrice(p) { return p.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function fmtStrike(s) { return s.toLocaleString('en-IN'); }
+
+function getNetQty(p) {
+  const bq = parseInt(p.flBuyQty ?? p.cfBuyQty ?? p.buyQty ?? 0);
+  const sq = parseInt(p.flSellQty ?? p.cfSellQty ?? p.sellQty ?? 0);
+  if (p.netQty !== undefined) return parseInt(p.netQty);
+  return bq - sq;
+}
+function getPnl(p) {
+  const ba = parseFloat(p.buyAmt ?? p.cfBuyAmt ?? 0);
+  const sa = parseFloat(p.sellAmt ?? p.cfSellAmt ?? 0);
+  const nq = getNetQty(p);
+  if (nq !== 0) {
+    const sym = p.trdSym || '';
+    const ltp = state.liveLtps[sym] || (p._ltp ? parseFloat(p._ltp) : 0);
+    if (ltp > 0) {
+      if (nq > 0) return (ltp * nq) - ba + sa;
+      else return sa - (ltp * Math.abs(nq)) - ba;
+    }
+  }
+  if (p._pnl !== undefined) return parseFloat(p._pnl);
+  return sa - ba;
+}
+
+async function api(url, opts={}) {
+  const r = await fetch(url, {credentials:'include', ...opts});
+  return r.json();
+}
+async function apiPost(url, body) {
+  return api(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+}
+
+// ─── Auth ───
+async function doAuthLogin() {
+  if (!state.authEmail || !state.authPassword) { addToast('Email and password required','error'); return; }
+  if (state.isRegister && state.authPassword.length < 6) { addToast('Password must be at least 6 characters','error'); return; }
+  state.authLoading = true; render();
+  try {
+    const url = state.isRegister ? '/api/auth/register' : '/api/auth/login';
+    const r = await apiPost(url, {email:state.authEmail, password:state.authPassword});
+    if (r.status === 'success') {
+      state.traderId = r.traderId || '';
+      addToast(state.isRegister ? 'Account created!' : 'Logged in!', 'success');
+      state.authStep = r.hasCredentials ? 'totp' : 'credentials';
+    } else { addToast(r.message || r.detail || 'Failed', 'error'); }
+  } catch { addToast('Connection error','error'); }
+  state.authLoading = false; render();
+}
+
+async function doSaveCredentials() {
+  if (!state.credAccessToken || !state.credMobile || !state.credMpin || !state.credUcc) { addToast('All fields are required','error'); return; }
+  state.credSaving = true; render();
+  try {
+    const r = await apiPost('/api/auth/credentials', {accessToken:state.credAccessToken, mobileNumber:state.credMobile, mpin:state.credMpin, ucc:state.credUcc});
+    if (r.status === 'success') { addToast('Credentials saved!','success'); state.authStep = 'totp'; }
+    else { addToast(r.message || r.detail || 'Failed','error'); }
+  } catch { addToast('Connection error','error'); }
+  state.credSaving = false; render();
+}
+
+async function doTotpLogin() {
+  if (state.totp.length !== 6) { addToast('Enter 6-digit TOTP','error'); return; }
+  state.loggingIn = true; render();
+  try {
+    const r = await apiPost('/api/kotak/connect', {totp:state.totp});
+    if (r.status === 'success') {
+      addToast(`Welcome, ${r.greeting || 'Trader'}`, 'success');
+      state.greeting = r.greeting || '';
+      state.authStep = 'terminal';
+      startTerminal();
+    } else { addToast(r.message || r.detail || 'Login failed','error'); }
+  } catch { addToast('Connection error','error'); }
+  state.loggingIn = false; render();
+}
+
+async function doLogout() {
+  if (!confirm('Logout and end trading session?')) return;
+  try { await apiPost('/api/auth/logout', {}); } catch {}
+  stopTerminal();
+  state.authStep = 'login'; state.isRegister = false; state.greeting = ''; state.totp = '';
+  state.chain = []; state.positions = []; state.orders = []; state.spotPrice = 0;
+  state.selectedStrike = null; state.traderId = ''; state.liveLtps = {};
+  addToast('Logged out','info');
+  render();
+}
+
+// ─── Terminal lifecycle ───
+function startTerminal() {
+  connectWs();
+  loadLimits(); loadPositions(); loadOrders(); loadExpiries(); refreshSpot();
+  limitsIv = setInterval(loadLimits, 30000);
+  posIv = setInterval(loadPositions, 5000);
+  spotIv = setInterval(refreshSpot, 3000);
+  render();
+}
+function stopTerminal() {
+  if (ws) { ws.onclose = null; ws.close(); ws = null; }
+  if (pingIv) clearInterval(pingIv);
+  if (reconnectTimeout) clearTimeout(reconnectTimeout);
+  if (spotIv) clearInterval(spotIv);
+  if (posIv) clearInterval(posIv);
+  if (limitsIv) clearInterval(limitsIv);
+  if (ltpIv) clearInterval(ltpIv);
+  pingIv = reconnectTimeout = spotIv = posIv = limitsIv = ltpIv = null;
+}
+
+function connectWs() {
+  if (pingIv) { clearInterval(pingIv); pingIv = null; }
+  if (reconnectTimeout) { clearTimeout(reconnectTimeout); reconnectTimeout = null; }
+  if (ws) { ws.onclose = null; ws.close(); }
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onopen = () => {
+    state.wsConnected = true; renderHeader();
+    pingIv = setInterval(() => { if (ws && ws.readyState === 1) ws.send('ping'); }, 25000);
+  };
+  ws.onclose = () => {
+    state.wsConnected = false; renderHeader();
+    if (pingIv) { clearInterval(pingIv); pingIv = null; }
+    reconnectTimeout = setTimeout(connectWs, 3000);
+  };
+  ws.onmessage = (e) => {
+    try {
+      const m = JSON.parse(e.data);
+      if (m.type === 'order_result') {
+        const d = m.data, ms = m.elapsed >= 0 ? ` (${m.elapsed}ms)` : '';
+        if (d.stat === 'Ok' || d.nOrdNo) addToast(`${m.action||'Order'} #${d.nOrdNo||''}${ms}`, 'success');
+        else addToast(`${m.action||'Order'} failed: ${d.emsg||d.errMsg||''}${ms}`, 'error');
+        loadOrders(); loadPositions();
+      } else if (m.type === 'order_update' || m.type === 'order_cancelled') {
+        const d = m.data;
+        if (d.stat === 'Ok' || d.nOrdNo) addToast(`${m.action||'Order'} #${d.nOrdNo||''}`, 'success');
+        else addToast(d.emsg||d.errMsg||'Order failed', 'error');
+        loadOrders(); loadPositions();
+      } else if (m.type === 'instruments_ready') {
+        addToast(`${m.index} instruments loaded`, 'info');
+        if (state.authStep === 'terminal') { loadExpiries(); loadChain(); }
+      } else if (m.type === 'close_all') {
+        loadPositions(); loadOrders();
+      }
+    } catch {}
+  };
+}
+
+async function refreshSpot() {
+  try {
+    const r = await api(`/api/spot/${state.currentIndex}`);
+    const p = parseFloat(r.spot);
+    if (p > 0) { state.spotPrice = p; renderSpotPrice(); }
+  } catch {}
+}
+
+async function loadExpiries() {
+  try {
+    const r = await api(`/api/expiries/${state.currentIndex}`);
+    state.expiries = r.expiries || [];
+    const nearest = state.expiries.find(e => e.is_nearest);
+    if (nearest) state.selectedExpiry = nearest.label;
+    else if (state.expiries.length > 0) state.selectedExpiry = state.expiries[0].label;
+    renderControls();
+    loadChain();
+  } catch {}
+}
+
+async function loadChain() {
+  state.chainLoading = true; state.selectedStrike = null; state.selectedIdx = -1;
+  renderChain(); renderActionBar();
+  try {
+    const r = await api(`/api/option-chain/${state.currentIndex}?strikes=${state.numStrikes}&expiry=${encodeURIComponent(state.selectedExpiry)}`);
+    if (r.error) { state.chain = []; state.chainLoading = false; renderChain(); return; }
+    if (r.spot_price) { state.spotPrice = parseFloat(r.spot_price); renderSpotPrice(); }
+    state.chain = r.chain || [];
+    const atmIdx = state.chain.findIndex(row => row.is_atm);
+    if (atmIdx >= 0) { state.selectedStrike = state.chain[atmIdx]; state.selectedIdx = atmIdx; }
+  } catch {}
+  state.chainLoading = false;
+  updatePrecomputed();
+  renderChain(); renderActionBar();
+}
+
+async function loadPositions() {
+  try {
+    const r = await api('/api/positions');
+    const st = (r.stat||'').toLowerCase();
+    state.positions = (st === 'ok' && r.data?.length) ? r.data : [];
+  } catch { state.positions = []; }
+  renderPositions();
+  startLtpPolling();
+}
+
+function startLtpPolling() {
+  if (ltpIv) clearInterval(ltpIv);
+  const fetchLtps = async () => {
+    const open = state.positions.filter(p => getNetQty(p) !== 0);
+    if (open.length === 0) return;
+    const tokens = open.map(p => ({seg: p.exSeg||'nse_fo', sym: p.trdSym||'', tok: p.tok||''}));
+    try {
+      const r = await apiPost('/api/ltp', {tokens});
+      if (r.stat === 'ok' && r.data) {
+        state.liveLtps = {...state.liveLtps, ...r.data};
+        renderPositions();
+      }
+    } catch {}
+  };
+  fetchLtps();
+  ltpIv = setInterval(fetchLtps, 1000);
+}
+
+async function loadOrders() {
+  try {
+    const r = await api('/api/orderbook');
+    const st = (r.stat||'').toLowerCase();
+    if (st === 'ok' && r.data?.length) {
+      state.orders = [...r.data].sort((a,b) => parseInt(b.boeSec||'0') - parseInt(a.boeSec||'0'));
+    } else state.orders = [];
+  } catch { state.orders = []; }
+  renderOrders();
+}
+
+async function loadLimits() {
+  try {
+    const r = await api('/api/limits');
+    if (r.stat === 'Ok') {
+      const fmt = v => '\u20B9' + parseFloat(v||0).toLocaleString('en-IN',{maximumFractionDigits:0});
+      state.funds = {available:fmt(r.Net), used:fmt(r.MarginUsed), collateral:fmt(r.CollateralValue)};
+      renderFunds();
+    }
+  } catch {}
+}
+
+function updatePrecomputed() {
+  precomputed = {};
+  if (!state.selectedStrike) return;
+  const s = state.selectedStrike;
+  for (const ot of ['CE','PE']) {
+    const p = ot.toLowerCase();
+    const ts = s[`${p}_ts`], es = s[`${p}_seg`], lotSize = s[`${p}_lot`] || 1, tok = s[`${p}_symbol`] || '';
+    if (!ts) continue;
+    for (const tt of ['B','S']) {
+      const qty = lotSize * state.lots;
+      precomputed[`${tt}_${ot}`] = JSON.stringify({am:'NO',dq:'0',es,mp:'0',pc:'MIS',pf:'N',pr:'0',pt:'MKT',qt:String(qty),rt:'DAY',tp:'0',ts,tt,tok});
+    }
+  }
+}
+
+function fire(tt, ot) {
+  if (!state.selectedStrike) { addToast('Select a strike first','error'); return; }
+  const key = `${tt}_${ot}`;
+  const jData = precomputed[key];
+  if (!jData) { addToast('No symbol available','error'); return; }
+  const action = `${tt==='B'?'BUY':'SELL'} ${ot} ${state.selectedStrike.strike}`;
+  addToast(`${action} x${state.lots} sent`, 'info');
+  fetch('/api/order/fast', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({jData,action})}).catch(() => addToast('Network error','error'));
+}
+
+function pickStrike(i) {
+  if (!state.chain[i]) return;
+  state.selectedStrike = state.chain[i];
+  state.selectedIdx = i;
+  updatePrecomputed();
+  renderChain(); renderActionBar();
+}
+
+function switchIndex(idx) {
+  state.currentIndex = idx;
+  state.selectedStrike = null; state.selectedIdx = -1; state.chain = [];
+  loadExpiries(); refreshSpot();
+  if (spotIv) clearInterval(spotIv);
+  spotIv = setInterval(refreshSpot, 3000);
+  renderControls(); renderChain(); renderActionBar();
+}
+
+async function closeAllPositions() {
+  if (!confirm('Close ALL open positions at market price?')) return;
+  try {
+    const r = await apiPost('/api/order/close-all', {});
+    if (r.status === 'ok') { addToast(`Closing ${r.closed} position(s) at market...`,'info'); setTimeout(() => { loadPositions(); loadOrders(); }, 1500); }
+    else addToast(r.message || 'Close all failed','error');
+  } catch { addToast('Network error','error'); }
+}
+
+async function cancelOrd(n) {
+  try {
+    const r = await apiPost('/api/order/cancel', {on:n});
+    if (r.stat === 'Ok') addToast('Order cancelled','success');
+    else addToast(r.emsg || 'Cancel failed','error');
+    loadOrders();
+  } catch { addToast('Network error','error'); }
+}
+
+// ─── Render functions ───
+function render() {
+  const app = $('#app');
+  app.innerHTML = '';
+  if (state.authStep === 'login') app.appendChild(renderLoginScreen());
+  else if (state.authStep === 'credentials') app.appendChild(renderCredentialsScreen());
+  else if (state.authStep === 'totp') app.appendChild(renderTotpScreen());
+  else app.appendChild(renderTerminal());
+  renderToasts();
+}
+
+function renderLoginScreen() {
+  const wrap = h('div','fixed inset-0 flex items-center justify-center',{style:{position:'fixed',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'var(--t-bg)'}});
+  const card = h('div','animate-fade-in',{style:{width:'100%',maxWidth:'400px',margin:'0 16px',padding:'24px 36px',borderRadius:'16px',textAlign:'center',background:'var(--t-sf)',border:'1px solid var(--t-bd)',boxShadow:'0 4px 12px rgba(0,0,0,.4)'}});
+  card.innerHTML = `
+    <div style="font-size:48px;margin-bottom:8px">&#x26A1;</div>
+    <div style="margin-bottom:4px"><span class="font-mono" style="color:var(--t-bl);font-size:18px;font-weight:700;letter-spacing:-0.5px">AKATSUKI</span></div>
+    <h1 style="font-size:18px;font-weight:700;margin-bottom:2px;color:var(--t-tx)">${state.isRegister ? 'Create Account' : 'Welcome Back'}</h1>
+    <p style="font-size:12px;margin-bottom:24px;color:var(--t-tx3)">${state.isRegister ? 'Sign up to start trading' : 'Sign in to your trading account'}</p>
+    <input id="inp-email" type="email" placeholder="Email address" value="${state.authEmail}" style="width:100%;padding:12px;border-radius:8px;font-size:14px;outline:none;margin-bottom:10px;background:var(--t-bg);border:1px solid var(--t-bd);color:var(--t-tx)" data-testid="input-email">
+    <input id="inp-pw" type="password" placeholder="Password" value="${state.authPassword}" style="width:100%;padding:12px;border-radius:8px;font-size:14px;outline:none;margin-bottom:14px;background:var(--t-bg);border:1px solid var(--t-bd);color:var(--t-tx)" data-testid="input-password">
+    <button id="btn-login" style="width:100%;padding:14px;border-radius:8px;font-size:14px;font-weight:600;color:white;border:none;cursor:pointer;background:linear-gradient(135deg,var(--t-bl),var(--t-bl2))" data-testid="button-login" ${state.authLoading?'disabled':''}>${state.authLoading ? '...' : state.isRegister ? 'Create Account' : 'Sign In'}</button>
+    <button id="btn-toggle" style="margin-top:12px;font-size:12px;font-weight:500;color:var(--t-bl);background:none;border:none;cursor:pointer" data-testid="button-toggle-register">${state.isRegister ? 'Already have an account? Sign In' : "Don't have an account? Create one"}</button>
+  `;
+  wrap.appendChild(card);
+  setTimeout(() => {
+    const ie = $('#inp-email'), ip = $('#inp-pw');
+    if (ie) { ie.addEventListener('input', e => state.authEmail = e.target.value); ie.addEventListener('keydown', e => { if (e.key==='Enter') doAuthLogin(); }); ie.focus(); }
+    if (ip) { ip.addEventListener('input', e => state.authPassword = e.target.value); ip.addEventListener('keydown', e => { if (e.key==='Enter') doAuthLogin(); }); }
+    const bl = $('#btn-login'); if (bl) bl.addEventListener('click', doAuthLogin);
+    const bt = $('#btn-toggle'); if (bt) bt.addEventListener('click', () => { state.isRegister = !state.isRegister; render(); });
+  }, 0);
+  return wrap;
+}
+
+function renderCredentialsScreen() {
+  const wrap = h('div','',{style:{position:'fixed',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'var(--t-bg)'}});
+  const card = h('div','animate-fade-in',{style:{width:'100%',maxWidth:'440px',margin:'0 16px',padding:'24px 36px',borderRadius:'16px',textAlign:'center',background:'var(--t-sf)',border:'1px solid var(--t-bd)',boxShadow:'0 4px 12px rgba(0,0,0,.4)'}});
+  const fields = [
+    {id:'credAT',label:'ACCESS TOKEN',val:state.credAccessToken,key:'credAccessToken',type:'text'},
+    {id:'credMob',label:'MOBILE NUMBER',val:state.credMobile,key:'credMobile',type:'text'},
+    {id:'credMpin',label:'MPIN',val:state.credMpin,key:'credMpin',type:'password'},
+    {id:'credUcc',label:'UCC (CLIENT CODE)',val:state.credUcc,key:'credUcc',type:'text'},
+  ];
+  let fieldsHtml = fields.map(f => `
+    <div style="margin-bottom:10px;text-align:left">
+      <label style="display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;color:var(--t-tx3)">${f.label}</label>
+      <input id="${f.id}" type="${f.type}" value="${f.val}" class="font-mono" style="width:100%;padding:10px;border-radius:8px;font-size:14px;outline:none;background:var(--t-bg);border:1px solid var(--t-bd);color:var(--t-tx)" data-testid="input-${f.id}">
+    </div>
+  `).join('');
+  card.innerHTML = `
+    <div style="font-size:48px;margin-bottom:16px">&#x1F511;</div>
+    <h1 style="font-size:20px;font-weight:700;margin-bottom:4px;color:var(--t-tx)">Kotak Credentials</h1>
+    <p style="font-size:12px;margin-bottom:24px;color:var(--t-tx3)">Enter your Kotak Securities API credentials. These are saved securely and only need to be entered once.</p>
+    ${fieldsHtml}
+    <button id="btn-save-cred" style="width:100%;padding:14px;margin-top:8px;border-radius:8px;font-size:14px;font-weight:600;color:white;border:none;cursor:pointer;background:linear-gradient(135deg,var(--t-gn),var(--t-gn2))" data-testid="button-save-credentials" ${state.credSaving?'disabled':''}>${state.credSaving ? 'Saving...' : 'Save & Continue'}</button>
+  `;
+  wrap.appendChild(card);
+  setTimeout(() => {
+    fields.forEach(f => {
+      const el = $(`#${f.id}`);
+      if (el) el.addEventListener('input', e => state[f.key] = e.target.value);
+    });
+    const bs = $('#btn-save-cred'); if (bs) bs.addEventListener('click', doSaveCredentials);
+  }, 0);
+  return wrap;
+}
+
+function renderTotpScreen() {
+  const wrap = h('div','',{style:{position:'fixed',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'var(--t-bg)'}});
+  const card = h('div','animate-fade-in',{style:{width:'100%',maxWidth:'380px',margin:'0 16px',padding:'24px 36px',borderRadius:'16px',textAlign:'center',background:'var(--t-sf)',border:'1px solid var(--t-bd)',boxShadow:'0 4px 12px rgba(0,0,0,.4)'}});
+  card.innerHTML = `
+    <div style="font-size:48px;margin-bottom:16px">&#x1F510;</div>
+    <h1 style="font-size:20px;font-weight:700;margin-bottom:4px;color:var(--t-tx)">Enter TOTP</h1>
+    <p style="font-size:12px;margin-bottom:4px;color:var(--t-bl)">${state.authEmail}</p>
+    <p style="font-size:12px;margin-bottom:24px;color:var(--t-tx3)">Enter your 6-digit TOTP to connect to Kotak</p>
+    <input id="inp-totp" type="text" maxlength="6" placeholder="000000" value="${state.totp}" class="font-mono" style="width:100%;padding:14px;border-radius:8px;font-size:24px;text-align:center;letter-spacing:12px;outline:none;background:var(--t-bg);border:1px solid var(--t-bd);color:var(--t-tx)" data-testid="input-totp">
+    <button id="btn-connect" style="width:100%;padding:14px;margin-top:14px;border-radius:8px;font-size:14px;font-weight:600;color:white;border:none;cursor:pointer;background:linear-gradient(135deg,var(--t-bl),var(--t-bl2))" data-testid="button-connect" ${state.loggingIn?'disabled':''}>${state.loggingIn ? 'Connecting...' : 'Connect & Trade'}</button>
+    <button id="btn-signout" style="margin-top:12px;font-size:12px;font-weight:500;color:var(--t-tx3);background:none;border:none;cursor:pointer" data-testid="button-back-logout">Sign out</button>
+  `;
+  wrap.appendChild(card);
+  setTimeout(() => {
+    const it = $('#inp-totp');
+    if (it) { it.addEventListener('input', e => { state.totp = e.target.value.replace(/\D/g,'').slice(0,6); it.value = state.totp; }); it.addEventListener('keydown', e => { if (e.key==='Enter') doTotpLogin(); }); it.focus(); }
+    const bc = $('#btn-connect'); if (bc) bc.addEventListener('click', doTotpLogin);
+    const bs = $('#btn-signout'); if (bs) bs.addEventListener('click', () => { apiPost('/api/auth/logout',{}); state.authStep='login'; state.totp=''; state.isRegister=false; render(); });
+  }, 0);
+  return wrap;
+}
+
+function renderTerminal() {
+  const root = h('div','',{style:{display:'flex',flexDirection:'column',height:'100vh',paddingBottom:'0',background:'var(--t-bg)'}});
+  root.innerHTML = `
+    <header id="hdr" style="display:flex;align-items:center;justify-content:space-between;padding:0 12px;height:44px;position:sticky;top:0;z-index:50;flex-shrink:0;background:linear-gradient(180deg,var(--t-sf),var(--t-bg2));border-bottom:1px solid var(--t-bd)"></header>
+    <div id="funds-bar" style="display:flex;align-items:center;gap:2px;padding:0 8px;height:28px;font-size:10px;flex-shrink:0;overflow-x:auto;background:var(--t-bg2);border-bottom:1px solid var(--t-bd)"></div>
+    <div id="ctrl-bar" style="display:flex;align-items:center;gap:6px;padding:4px 8px;flex-shrink:0;flex-wrap:wrap;background:var(--t-sf);border-bottom:1px solid var(--t-bd)"></div>
+    <div id="action-bar-desktop" style="display:none;align-items:center;padding:0 20px;flex-shrink:0;background:linear-gradient(180deg,var(--t-sf),var(--t-bg2));border-bottom:2px solid var(--t-bd);min-height:70px"></div>
+    <div id="main-content" style="flex:1;display:flex;flex-direction:column;overflow:hidden"></div>
+    <footer id="footer-desktop" style="display:none;align-items:center;justify-content:center;flex-wrap:wrap;gap:0 16px;padding:6px 16px;flex-shrink:0;background:var(--t-bg2);border-top:1px solid var(--t-bd)"></footer>
+    <div id="mobile-bar" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:40;flex-direction:column;background:var(--t-sf);border-top:2px solid var(--t-bd)"></div>
+  `;
+
+  // responsive: show/hide mobile vs desktop
+  const mql = window.matchMedia('(min-width:768px)');
+  function applyMq() {
+    const isDesktop = mql.matches;
+    root.querySelector('#action-bar-desktop').style.display = isDesktop ? 'flex' : 'none';
+    root.querySelector('#footer-desktop').style.display = isDesktop ? 'flex' : 'none';
+    root.querySelector('#mobile-bar').style.display = isDesktop ? 'none' : 'flex';
+    root.style.paddingBottom = isDesktop ? '0' : '180px';
+  }
+  mql.addEventListener('change', applyMq);
+  setTimeout(applyMq, 0);
+
+  setTimeout(() => {
+    renderHeader(); renderFunds(); renderControls(); renderActionBar(); renderChain(); renderPositions(); renderOrders(); renderFooter(); renderMobileBar();
+  }, 0);
+  return root;
+}
+
+function renderHeader() {
+  const el = $('#hdr'); if (!el) return;
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:20px">\u26A1</span>
+      <span class="font-mono" style="color:var(--t-bl);font-size:15px;font-weight:700;letter-spacing:-0.5px">AKATSUKI</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="font-mono" style="font-size:11px;color:var(--t-tx3)" data-testid="text-clock" id="clock-el">${state.clock}</span>
+      <span style="font-size:11px;font-weight:500;color:var(--t-tx2)" data-testid="text-username">${state.greeting || state.authEmail}</span>
+      <div style="display:flex;align-items:center;gap:4px;padding:2px 10px;border-radius:9999px;font-size:11px;font-weight:500;${state.wsConnected ? 'background:rgba(16,185,129,.08);color:var(--t-gn)' : 'background:rgba(239,68,68,.08);color:var(--t-rd)'}" data-testid="status-pill">
+        <span style="width:6px;height:6px;border-radius:50%;background:${state.wsConnected?'var(--t-gn)':'var(--t-rd)'}" class="${state.wsConnected?'animate-pulse-dot':''}"></span>
+        <span>${state.wsConnected ? 'Live' : 'Offline'}</span>
+      </div>
+      <button id="btn-logout" style="display:flex;align-items:center;gap:4px;padding:4px 12px;border-radius:6px;font-size:11px;font-weight:600;background:rgba(239,68,68,.08);color:var(--t-rd);border:1px solid rgba(239,68,68,.15);cursor:pointer" data-testid="button-logout">\u23FB Logout</button>
+    </div>
+  `;
+  $('#btn-logout')?.addEventListener('click', doLogout);
+}
+
+function renderFunds() {
+  const el = $('#funds-bar'); if (!el) return;
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:4px;padding:0 12px"><span style="color:var(--t-tx3)">Avl</span><span class="font-mono" style="font-weight:600;color:var(--t-tx)" data-testid="text-fund-avl">${state.funds.available}</span></div>
+    <div style="width:1px;height:16px;margin:0 12px;background:var(--t-bd);flex-shrink:0"></div>
+    <div style="display:flex;align-items:center;gap:4px;padding:0 12px"><span style="color:var(--t-tx3)">Used</span><span class="font-mono" style="font-weight:600;color:var(--t-tx)" data-testid="text-fund-used">${state.funds.used}</span></div>
+    <div style="width:1px;height:16px;margin:0 12px;background:var(--t-bd);flex-shrink:0"></div>
+    <div style="display:flex;align-items:center;gap:4px;padding:0 12px"><span style="color:var(--t-tx3)">Col</span><span class="font-mono" style="font-weight:600;color:var(--t-tx)" data-testid="text-fund-col">${state.funds.collateral}</span></div>
+  `;
+}
+
+function renderControls() {
+  const el = $('#ctrl-bar'); if (!el) return;
+  const expiryOpts = state.expiries.map(e => `<option value="${e.label}" ${e.label===state.selectedExpiry?'selected':''}>${e.label}</option>`).join('');
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;color:var(--t-tx3)">Index</span>
+      <select id="sel-idx" class="ctrl-select" data-testid="select-index"><option value="NIFTY" ${state.currentIndex==='NIFTY'?'selected':''}>NIFTY 50</option><option value="BANKNIFTY" ${state.currentIndex==='BANKNIFTY'?'selected':''}>BANK NIFTY</option><option value="SENSEX" ${state.currentIndex==='SENSEX'?'selected':''}>SENSEX</option></select>
+    </div>
+    <div style="display:flex;align-items:center;gap:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;color:var(--t-tx3)">Expiry</span>
+      <select id="sel-exp" class="ctrl-select" data-testid="select-expiry">${expiryOpts}</select>
+    </div>
+    <div style="display:flex;align-items:center;gap:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;color:var(--t-tx3)">Strikes</span>
+      <select id="sel-str" class="ctrl-select" data-testid="select-strikes"><option value="3" ${state.numStrikes===3?'selected':''}>±3</option><option value="5" ${state.numStrikes===5?'selected':''}>±5</option><option value="10" ${state.numStrikes===10?'selected':''}>±10</option><option value="15" ${state.numStrikes===15?'selected':''}>±15</option></select>
+    </div>
+    <button id="btn-chain-toggle" style="display:flex;align-items:center;gap:4px;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:500;cursor:pointer;${state.showChain ? 'background:rgba(59,130,246,.12);color:var(--t-bl);border:1px solid rgba(59,130,246,.25)' : 'background:var(--t-sf2);color:var(--t-tx2);border:1px solid var(--t-bd)'}" data-testid="button-toggle-chain">${state.showChain ? '\u25BC Hide Chain' : '\u25B6 Option Chain'}</button>
+    ${state.showChain ? `<button id="btn-chain-refresh" style="display:flex;align-items:center;gap:4px;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:500;cursor:pointer;background:var(--t-sf2);color:var(--t-tx2);border:1px solid var(--t-bd)" data-testid="button-refresh-chain">\u21BB</button>` : ''}
+    <button id="btn-pos-toggle" style="display:flex;align-items:center;gap:4px;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:500;cursor:pointer;${state.showPositions ? 'background:rgba(16,185,129,.12);color:var(--t-gn);border:1px solid rgba(16,185,129,.25)' : 'background:var(--t-sf2);color:var(--t-tx2);border:1px solid var(--t-bd)'}" data-testid="button-toggle-positions">${state.showPositions ? '\u25BC Positions' : '\u25B6 Positions'}${state.positions.length > 0 ? `<span style="font-size:9px;padding:1px 4px;border-radius:8px;font-weight:600;margin-left:2px;background:rgba(59,130,246,.1);color:var(--t-bl)">${state.positions.length}</span>` : ''}</button>
+    <button id="btn-ord-toggle" style="display:flex;align-items:center;gap:4px;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:500;cursor:pointer;${state.showOrders ? 'background:rgba(245,158,11,.12);color:var(--t-yw);border:1px solid rgba(245,158,11,.25)' : 'background:var(--t-sf2);color:var(--t-tx2);border:1px solid var(--t-bd)'}" data-testid="button-toggle-orders">${state.showOrders ? '\u25BC Orders' : '\u25B6 Orders'}${state.orders.length > 0 ? `<span style="font-size:9px;padding:1px 4px;border-radius:8px;font-weight:600;margin-left:2px;background:rgba(59,130,246,.1);color:var(--t-bl)">${state.orders.length}</span>` : ''}</button>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:baseline;gap:6px" id="spot-container">
+      <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--t-tx3)">Spot</span>
+      <span class="font-mono" style="font-size:22px;font-weight:700;color:var(--t-yw);text-shadow:0 0 20px rgba(245,158,11,.15)" data-testid="text-spot-price" id="spot-val">${state.spotPrice > 0 ? fmtPrice(state.spotPrice) : '--'}</span>
+    </div>
+  `;
+  $('#sel-idx')?.addEventListener('change', e => switchIndex(e.target.value));
+  $('#sel-exp')?.addEventListener('change', e => { state.selectedExpiry = e.target.value; loadChain(); });
+  $('#sel-str')?.addEventListener('change', e => { state.numStrikes = parseInt(e.target.value); loadChain(); });
+  $('#btn-chain-toggle')?.addEventListener('click', () => { state.showChain = !state.showChain; renderControls(); renderMainContent(); });
+  $('#btn-chain-refresh')?.addEventListener('click', () => loadChain());
+  $('#btn-pos-toggle')?.addEventListener('click', () => { state.showPositions = !state.showPositions; renderControls(); renderMainContent(); });
+  $('#btn-ord-toggle')?.addEventListener('click', () => { state.showOrders = !state.showOrders; renderControls(); renderMainContent(); });
+}
+
+function renderSpotPrice() {
+  const el = $('#spot-val'); if (el) el.textContent = state.spotPrice > 0 ? fmtPrice(state.spotPrice) : '--';
+}
+
+function renderActionBar() {
+  const el = $('#action-bar-desktop'); if (!el) return;
+  const s = state.selectedStrike;
+  const hasCe = s && s.ce_ts;
+  const hasPe = s && s.pe_ts;
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;padding-right:24px;margin-right:20px;border-right:1px solid var(--t-bd)">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+        <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:4px;background:rgba(16,185,129,.08);color:var(--t-gn);border:1px solid rgba(16,185,129,.15)">CALL</span>
+        <div style="font-size:9px;text-align:center;white-space:nowrap;color:var(--t-tx3)">
+          <kbd class="font-mono" style="display:inline-block;padding:1px 4px;border-radius:4px;font-size:9px;background:var(--t-sf3);border:1px solid var(--t-bd2);color:var(--t-tx2)">1</kbd> buy<br>
+          <kbd class="font-mono" style="display:inline-block;padding:1px 4px;border-radius:4px;font-size:9px;background:var(--t-sf3);border:1px solid var(--t-bd2);color:var(--t-tx2)">3</kbd> sell
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button class="action-btn" data-testid="button-buy-ce" ${hasCe?'':'disabled'} onclick="fire('B','CE')" style="padding:8px 20px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:white;letter-spacing:.05em;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;min-width:112px;border:none;cursor:pointer;background:linear-gradient(135deg,#10b981,#059669);opacity:${hasCe?1:0.25};box-shadow:${hasCe?'0 1px 3px rgba(0,0,0,.3)':'none'}">\u25B2 BUY CE</button>
+        <button class="action-btn" data-testid="button-sell-ce" ${hasCe?'':'disabled'} onclick="fire('S','CE')" style="padding:8px 20px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:white;letter-spacing:.05em;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;min-width:112px;border:none;cursor:pointer;background:linear-gradient(135deg,#ef4444,#dc2626);opacity:${hasCe?1:0.25};box-shadow:${hasCe?'0 1px 3px rgba(0,0,0,.3)':'none'}">\u25BC SELL CE</button>
+      </div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 20px">
+      <div class="font-mono" style="font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center" data-testid="text-selected-strike">
+        ${s ? `
+          <span style="font-size:18px;font-weight:700;color:var(--t-yw)">${fmtStrike(s.strike)}</span>
+          <span style="font-size:10px;padding:2px 8px;border-radius:4px;color:var(--t-tx3);background:var(--t-sf2)">CE: ${s.ce_ts||'N/A'}</span>
+          <span style="font-size:10px;padding:2px 8px;border-radius:4px;color:var(--t-tx3);background:var(--t-sf2)">PE: ${s.pe_ts||'N/A'}</span>
+        ` : `<span style="font-size:12px;font-style:italic;color:var(--t-tx3)">Select a strike from the option chain</span>`}
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--t-tx3)">LOTS</span>
+        <button data-testid="button-lot-minus" onclick="state.lots=Math.max(1,state.lots-1);updatePrecomputed();renderActionBar();renderMobileBar();" style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:4px;font-weight:700;font-size:15px;background:var(--t-sf2);border:1px solid var(--t-bd);color:var(--t-tx);cursor:pointer">\u2212</button>
+        <input id="inp-lots" type="number" value="${state.lots}" data-testid="input-lots" class="font-mono" style="width:56px;padding:4px 6px;border-radius:4px;text-align:center;font-size:16px;font-weight:700;outline:none;background:var(--t-bg);border:1px solid var(--t-bd);color:var(--t-tx)">
+        <button data-testid="button-lot-plus" onclick="state.lots=Math.min(50,state.lots+1);updatePrecomputed();renderActionBar();renderMobileBar();" style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:4px;font-weight:700;font-size:15px;background:var(--t-sf2);border:1px solid var(--t-bd);color:var(--t-tx);cursor:pointer">+</button>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;padding-left:24px;margin-left:20px;border-left:1px solid var(--t-bd)">
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button class="action-btn" data-testid="button-buy-pe" ${hasPe?'':'disabled'} onclick="fire('B','PE')" style="padding:8px 20px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:white;letter-spacing:.05em;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;min-width:112px;border:none;cursor:pointer;background:linear-gradient(135deg,#10b981,#059669);opacity:${hasPe?1:0.25};box-shadow:${hasPe?'0 1px 3px rgba(0,0,0,.3)':'none'}">\u25B2 BUY PE</button>
+        <button class="action-btn" data-testid="button-sell-pe" ${hasPe?'':'disabled'} onclick="fire('S','PE')" style="padding:8px 20px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:white;letter-spacing:.05em;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;min-width:112px;border:none;cursor:pointer;background:linear-gradient(135deg,#ef4444,#dc2626);opacity:${hasPe?1:0.25};box-shadow:${hasPe?'0 1px 3px rgba(0,0,0,.3)':'none'}">\u25BC SELL PE</button>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+        <span style="font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:4px;background:rgba(239,68,68,.08);color:var(--t-rd);border:1px solid rgba(239,68,68,.15)">PUT</span>
+        <div style="font-size:9px;text-align:center;white-space:nowrap;color:var(--t-tx3)">
+          <kbd class="font-mono" style="display:inline-block;padding:1px 4px;border-radius:4px;font-size:9px;background:var(--t-sf3);border:1px solid var(--t-bd2);color:var(--t-tx2)">7</kbd> buy<br>
+          <kbd class="font-mono" style="display:inline-block;padding:1px 4px;border-radius:4px;font-size:9px;background:var(--t-sf3);border:1px solid var(--t-bd2);color:var(--t-tx2)">9</kbd> sell
+        </div>
+      </div>
+    </div>
+  `;
+  const il = $('#inp-lots');
+  if (il) il.addEventListener('change', e => { state.lots = Math.max(1, Math.min(50, parseInt(e.target.value)||1)); updatePrecomputed(); renderActionBar(); renderMobileBar(); });
+}
+
+function renderMainContent() {
+  renderChain(); renderPositions(); renderOrders();
+}
+
+function renderChain() {
+  const mc = $('#main-content'); if (!mc) return;
+  let chainEl = $('#chain-panel');
+  if (!state.showChain) { if (chainEl) chainEl.remove(); return; }
+  if (!chainEl) { chainEl = h('div','',{id:'chain-panel',style:{overflowY:'auto',overflowX:'hidden',flexShrink:'0',maxHeight:'40vh',borderBottom:'1px solid var(--t-bd)'}}); mc.prepend(chainEl); }
+  if (state.chainLoading) {
+    chainEl.innerHTML = `<div style="padding:32px;text-align:center"><div style="display:inline-block;width:20px;height:20px;border-radius:50%;border:2px solid var(--t-bd);border-top-color:var(--t-bl)" class="animate-spin"></div></div>`;
+    return;
+  }
+  if (state.chain.length === 0) {
+    chainEl.innerHTML = `<div style="padding:40px;text-align:center;font-size:11px;color:var(--t-tx3)">${state.expiries.length===0 ? 'Loading instruments...' : 'No data available'}</div>`;
+    return;
+  }
+  let rows = state.chain.map((row, i) => {
+    const sel = state.selectedIdx === i;
+    const bg = sel ? 'rgba(245,158,11,.12)' : row.is_atm ? 'rgba(59,130,246,.08)' : 'transparent';
+    const shadow = sel ? 'inset 3px 0 0 var(--t-yw)' : 'none';
+    const bTop = row.is_atm ? '1px solid rgba(59,130,246,.2)' : 'none';
+    const bBot = row.is_atm ? '1px solid rgba(59,130,246,.2)' : '1px solid rgba(36,48,73,.5)';
+    return `<tr data-i="${i}" data-testid="row-strike-${row.strike}" style="cursor:pointer;background:${bg};box-shadow:${shadow};border-top:${bTop};border-bottom:${bBot}">
+      <td style="padding:6px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t-tx3)">${row.ce_ts||'\u2014'}</td>
+      <td style="padding:6px;text-align:center;font-size:10px;color:var(--t-tx3)">${row.ce_ts?row.ce_lot:'\u2014'}</td>
+      <td style="padding:6px;text-align:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;color:var(--t-yw)">${fmtStrike(row.strike)}${row.is_atm?'<span style="display:inline-block;font-size:8px;padding:1px 6px;margin-left:4px;border-radius:4px;font-weight:700;vertical-align:middle;letter-spacing:.05em;background:rgba(59,130,246,.2);color:var(--t-bl)">ATM</span>':''}</td>
+      <td style="padding:6px;text-align:center;font-size:10px;color:var(--t-tx3)">${row.pe_ts?row.pe_lot:'\u2014'}</td>
+      <td style="padding:6px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t-tx3)">${row.pe_ts||'\u2014'}</td>
+    </tr>`;
+  }).join('');
+  chainEl.innerHTML = `<table>
+    <thead style="position:sticky;top:0;z-index:10"><tr>
+      <th style="padding:8px 6px;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;background:var(--t-sf);border-bottom:2px solid var(--t-bd);color:var(--t-gn)">CE Symbol</th>
+      <th style="padding:8px 6px;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;background:var(--t-sf);border-bottom:2px solid var(--t-bd);color:var(--t-gn)">CE Lot</th>
+      <th style="padding:8px 6px;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;background:var(--t-sf);border-bottom:2px solid var(--t-bd);color:var(--t-yw)">Strike</th>
+      <th style="padding:8px 6px;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;background:var(--t-sf);border-bottom:2px solid var(--t-bd);color:var(--t-rd)">PE Lot</th>
+      <th style="padding:8px 6px;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;background:var(--t-sf);border-bottom:2px solid var(--t-bd);color:var(--t-rd)">PE Symbol</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+  chainEl.querySelectorAll('tr[data-i]').forEach(tr => {
+    tr.addEventListener('click', () => pickStrike(parseInt(tr.dataset.i)));
+  });
+}
+
+function renderPositions() {
+  const mc = $('#main-content'); if (!mc) return;
+  let panel = $('#pos-ord-panel');
+  if (!state.showPositions && !state.showOrders) { if (panel) panel.remove(); return; }
+  if (!panel) { panel = h('div','',{id:'pos-ord-panel',style:{flex:'1',minHeight:'0',display:'grid',borderTop:state.showChain?'none':'1px solid var(--t-bd)'}}); mc.appendChild(panel); }
+  if (state.showPositions && state.showOrders) panel.style.gridTemplateColumns = window.matchMedia('(min-width:768px)').matches ? '1fr 1fr' : '1fr';
+  else panel.style.gridTemplateColumns = '1fr';
+  let posEl = panel.querySelector('#pos-panel');
+  if (!state.showPositions) { if (posEl) posEl.remove(); renderOrders(); return; }
+  if (!posEl) { posEl = h('div','',{id:'pos-panel',style:{display:'flex',flexDirection:'column',overflow:'hidden',borderRight:state.showOrders?'1px solid var(--t-bd)':'none'}}); panel.prepend(posEl); }
+  posEl.style.borderRight = state.showOrders ? '1px solid var(--t-bd)' : 'none';
+
+  const openPos = state.positions.filter(p => getNetQty(p) !== 0);
+  const closedPos = state.positions.filter(p => getNetQty(p) === 0);
+  const openPnl = openPos.reduce((s,p) => s + getPnl(p), 0);
+  const closedPnl = closedPos.reduce((s,p) => s + getPnl(p), 0);
+  const totalPnl = openPnl + closedPnl;
+
+  let html = `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;flex-shrink:0;background:var(--t-sf);border-bottom:1px solid var(--t-bd)">
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--t-tx2)">\uD83D\uDCCA Positions <span style="font-size:9px;padding:1px 6px;border-radius:8px;font-weight:600;background:rgba(59,130,246,.1);color:var(--t-bl)" data-testid="text-pos-count">${state.positions.length}</span></div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button onclick="closeAllPositions()" style="padding:2px 10px;border-radius:4px;font-size:10px;font-weight:700;background:rgba(239,68,68,.08);color:var(--t-rd);border:1px solid rgba(239,68,68,.15);cursor:pointer" data-testid="button-close-all">\u2715 Close All</button>
+        <button onclick="loadPositions()" style="padding:2px 8px;border-radius:4px;font-size:10px;border:1px solid var(--t-bd);color:var(--t-tx3);background:none;cursor:pointer" data-testid="button-refresh-positions">\u21BB</button>
+      </div>
+    </div>`;
+  if (state.positions.length > 0) {
+    html += `<div style="display:flex;align-items:center;gap:16px;padding:4px 12px;flex-shrink:0;font-size:11px;background:var(--t-bg2);border-bottom:1px solid var(--t-bd)">
+      <div style="display:flex;align-items:center;gap:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--t-tx3)">Total</span><span class="font-mono" style="font-weight:700;font-size:13px;color:${totalPnl>0?'var(--t-gn)':totalPnl<0?'var(--t-rd)':'var(--t-tx3)'}" data-testid="text-total-pnl">${totalPnl>=0?'+':'-'}\u20B9${Math.abs(totalPnl).toFixed(2)}</span></div>
+      <div style="display:flex;align-items:center;gap:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--t-tx3)">Open</span><span class="font-mono" style="font-weight:600;font-size:11px;color:${openPnl>0?'var(--t-gn)':openPnl<0?'var(--t-rd)':'var(--t-tx3)'}">${openPnl>=0?'+':'-'}\u20B9${Math.abs(openPnl).toFixed(2)}</span></div>
+      <div style="display:flex;align-items:center;gap:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--t-tx3)">Closed</span><span class="font-mono" style="font-weight:600;font-size:11px;color:${closedPnl>0?'var(--t-gn)':closedPnl<0?'var(--t-rd)':'var(--t-tx3)'}">${closedPnl>=0?'+':'-'}\u20B9${Math.abs(closedPnl).toFixed(2)}</span></div>
+    </div>`;
+  }
+  html += `<div style="flex:1;overflow-y:auto;padding:2px 0">`;
+  if (state.positions.length === 0) {
+    html += `<div style="padding:20px;text-align:center;font-size:11px;color:var(--t-tx3)">No positions today</div>`;
+  } else {
+    if (openPos.length > 0) {
+      html += `<div style="padding:4px 12px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t-gn);background:rgba(16,185,129,.04);border-bottom:1px solid rgba(16,185,129,.1)" data-testid="section-open-positions">\u25CF Open Positions (${openPos.length})</div>`;
+      openPos.forEach((p,i) => {
+        const nq = getNetQty(p), pnl = getPnl(p);
+        const bq = parseInt(p.flBuyQty??p.cfBuyQty??p.buyQty??0), sq = parseInt(p.flSellQty??p.cfSellQty??p.sellQty??0);
+        const ba = parseFloat(p.buyAmt??p.cfBuyAmt??0), sa = parseFloat(p.sellAmt??p.cfSellAmt??0);
+        const avgPx = nq>0 ? (bq>0?(ba/bq).toFixed(2):'--') : (sq>0?(sa/sq).toFixed(2):'--');
+        const sym = p.trdSym??p.sym??p.tsym??'--';
+        const isLong = nq > 0;
+        const ltp = state.liveLtps[sym] || (p._ltp?parseFloat(p._ltp):0);
+        const ltpStr = ltp > 0 ? ` \u2192 ${ltp.toFixed(2)}` : '';
+        html += `<div data-testid="row-open-position-${i}" style="display:grid;align-items:center;gap:8px;padding:6px 12px;font-size:11px;grid-template-columns:1fr auto auto auto;border-bottom:1px solid rgba(36,48,73,.4)">
+          <span class="font-mono" style="font-weight:600;font-size:10px;display:flex;align-items:center;gap:6px">${sym}<span style="font-size:8px;padding:1px 6px;border-radius:4px;font-weight:600;${isLong?'background:rgba(16,185,129,.08);color:var(--t-gn)':'background:rgba(239,68,68,.08);color:var(--t-rd)'}">${isLong?'LONG':'SHORT'}</span></span>
+          <span class="font-mono" style="font-size:10px;color:var(--t-tx2)">Qty: ${Math.abs(nq)}</span>
+          <span class="font-mono" style="font-size:10px;color:var(--t-tx3)">@\u20B9${avgPx}${ltpStr}</span>
+          <span class="font-mono" style="font-weight:600;font-size:11px;color:${pnl>=0?'var(--t-gn)':'var(--t-rd)'}">${pnl>=0?'+':'-'}\u20B9${Math.abs(pnl).toFixed(2)}</span>
+        </div>`;
+      });
+    }
+    if (closedPos.length > 0) {
+      html += `<div style="padding:4px 12px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t-tx3);background:rgba(100,116,139,.04);border-bottom:1px solid rgba(100,116,139,.1);${openPos.length>0?'border-top:1px solid var(--t-bd)':''}" data-testid="section-closed-positions">\u25CB Closed Positions (${closedPos.length})</div>`;
+      closedPos.forEach((p,i) => {
+        const pnl = getPnl(p);
+        const bq = parseInt(p.flBuyQty??p.cfBuyQty??p.buyQty??0), sq = parseInt(p.flSellQty??p.cfSellQty??p.sellQty??0);
+        const ba = parseFloat(p.buyAmt??p.cfBuyAmt??0), sa = parseFloat(p.sellAmt??p.cfSellAmt??0);
+        const avgBuy = bq>0?(ba/bq).toFixed(2):'--', avgSell = sq>0?(sa/sq).toFixed(2):'--';
+        const sym = p.trdSym??p.sym??p.tsym??'--';
+        const totalQty = Math.max(bq, sq);
+        html += `<div data-testid="row-closed-position-${i}" style="display:grid;align-items:center;gap:8px;padding:6px 12px;font-size:11px;grid-template-columns:1fr auto auto auto;border-bottom:1px solid rgba(36,48,73,.4);opacity:.7">
+          <span class="font-mono" style="font-weight:600;font-size:10px;display:flex;align-items:center;gap:6px">${sym}<span style="font-size:8px;padding:1px 6px;border-radius:4px;font-weight:600;background:rgba(100,116,139,.08);color:var(--t-tx3)">CLOSED</span></span>
+          <span class="font-mono" style="font-size:10px;color:var(--t-tx2)">Qty: ${totalQty}</span>
+          <span class="font-mono" style="font-size:10px;color:var(--t-tx3)">\u20B9${avgBuy}/${avgSell}</span>
+          <span class="font-mono" style="font-weight:600;font-size:11px;color:${pnl>=0?'var(--t-gn)':'var(--t-rd)'}">${pnl>=0?'+':'-'}\u20B9${Math.abs(pnl).toFixed(2)}</span>
+        </div>`;
+      });
+    }
+  }
+  html += `</div>`;
+  posEl.innerHTML = html;
+  renderMobileBar();
+}
+
+function renderOrders() {
+  const panel = $('#pos-ord-panel'); if (!panel) return;
+  let ordEl = panel.querySelector('#ord-panel');
+  if (!state.showOrders) { if (ordEl) ordEl.remove(); return; }
+  if (!ordEl) { ordEl = h('div','',{id:'ord-panel',style:{display:'flex',flexDirection:'column',overflow:'hidden'}}); panel.appendChild(ordEl); }
+  let html = `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;flex-shrink:0;background:var(--t-sf);border-bottom:1px solid var(--t-bd)">
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--t-tx2)">\uD83D\uDCCB Orders <span style="font-size:9px;padding:1px 6px;border-radius:8px;font-weight:600;background:rgba(59,130,246,.1);color:var(--t-bl)" data-testid="text-ord-count">${state.orders.length}</span></div>
+      <button onclick="loadOrders()" style="padding:2px 8px;border-radius:4px;font-size:10px;border:1px solid var(--t-bd);color:var(--t-tx3);background:none;cursor:pointer" data-testid="button-refresh-orders">\u21BB</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:2px 0">`;
+  if (state.orders.length === 0) {
+    html += `<div style="padding:20px;text-align:center;font-size:11px;color:var(--t-tx3)">No orders today</div>`;
+  } else {
+    state.orders.slice(0,50).forEach((o,i) => {
+      const isBuy = o.trnsTp === 'B';
+      const st = (o.ordSt||'').toLowerCase();
+      let stCls = 'pending';
+      if (st.includes('reject')) stCls = 'rejected';
+      else if (st.includes('complete') || st.includes('traded')) stCls = 'complete';
+      else if (st.includes('open') || st.includes('trigger')) stCls = 'open';
+      const fillPx = o.flPrc || o.avgPrc;
+      const ordPx = o.prc;
+      let dispPx = '--';
+      if (fillPx && parseFloat(fillPx) > 0) dispPx = parseFloat(fillPx).toFixed(2);
+      else if (ordPx && parseFloat(ordPx) > 0) dispPx = parseFloat(ordPx).toFixed(2);
+      else dispPx = 'MKT';
+      const rawT = o.ordTm || o.exTm || o.ordGenTm || '';
+      const tm = rawT.match(/(\d{2}:\d{2}:\d{2})/);
+      const timeStr = tm ? tm[1] : '';
+      const sColors = {complete:{bg:'rgba(16,185,129,.08)',c:'var(--t-gn)'},rejected:{bg:'rgba(239,68,68,.08)',c:'var(--t-rd)'},open:{bg:'rgba(245,158,11,.12)',c:'var(--t-yw)'},pending:{bg:'rgba(59,130,246,.1)',c:'var(--t-bl)'}};
+      const sc = sColors[stCls]||sColors.pending;
+      const lastCol = stCls === 'open' ?
+        `<button onclick="event.stopPropagation();cancelOrd('${o.nOrdNo}')" style="padding:2px 8px;border-radius:4px;font-size:9px;font-weight:600;background:rgba(239,68,68,.08);color:var(--t-rd);border:1px solid rgba(239,68,68,.15);cursor:pointer" data-testid="button-cancel-order-${i}">\u2715</button>` :
+        (timeStr ? `<span class="font-mono" style="font-size:9px;color:var(--t-tx3)">${timeStr}</span>` : '<span></span>');
+      html += `<div data-testid="row-order-${i}" style="display:grid;align-items:center;gap:8px;padding:6px 12px;font-size:11px;grid-template-columns:18px 1fr auto auto auto auto;border-bottom:1px solid rgba(36,48,73,.4)">
+        <div style="width:18px;height:18px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;${isBuy?'background:rgba(16,185,129,.08);color:var(--t-gn)':'background:rgba(239,68,68,.08);color:var(--t-rd)'}">${isBuy?'B':'S'}</div>
+        <span class="font-mono" style="font-weight:500;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.trdSym}</span>
+        <span class="font-mono" style="font-weight:600;font-size:10px;color:var(--t-yw)">${dispPx}</span>
+        <span class="font-mono" style="font-size:10px;color:var(--t-tx2)">${o.qty}</span>
+        <span style="font-size:9px;padding:2px 6px;border-radius:4px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;background:${sc.bg};color:${sc.c}">${o.ordSt}</span>
+        ${lastCol}
+      </div>`;
+    });
+  }
+  html += `</div>`;
+  ordEl.innerHTML = html;
+}
+
+function renderFooter() {
+  const el = $('#footer-desktop'); if (!el) return;
+  el.innerHTML = `
+    <span style="font-size:10px;font-weight:500;color:var(--t-tx3)">Copyright \u00A9 Akatsuki</span>
+    <span style="width:1px;height:12px;background:var(--t-bd)"></span>
+    <span style="font-size:10px;color:var(--t-tx3)">Crafted by <span style="font-weight:600;color:var(--t-tx2)">Dr. Arvind Dahiya</span> &amp; <span style="font-weight:600;color:var(--t-tx2)">HC</span></span>
+  `;
+}
+
+function renderMobileBar() {
+  const el = $('#mobile-bar'); if (!el) return;
+  const s = state.selectedStrike;
+  const hasCe = s && s.ce_ts;
+  const hasPe = s && s.pe_ts;
+  const openPos = state.positions.filter(p => getNetQty(p) !== 0);
+  const closedPos = state.positions.filter(p => getNetQty(p) === 0);
+  const totalPnl = openPos.reduce((sum,p) => sum+getPnl(p), 0) + closedPos.reduce((sum,p) => sum+getPnl(p), 0);
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 12px;border-bottom:1px solid var(--t-bd)">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="font-mono" style="font-size:12px" data-testid="text-selected-strike-mobile">
+          ${s ? `<span style="color:var(--t-yw)">\u25C9 ${fmtStrike(s.strike)}</span>` : `<span style="font-style:italic;font-size:10px;color:var(--t-tx3)">No strike</span>`}
+        </div>
+        <span class="font-mono" style="font-size:10px;font-weight:700;color:${totalPnl>0?'var(--t-gn)':totalPnl<0?'var(--t-rd)':'var(--t-tx3)'}" data-testid="text-mobile-pnl">P&L ${totalPnl>=0?'+':''}\u20B9${totalPnl.toFixed(0)}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:4px">
+        <span style="font-size:9px;font-weight:600;text-transform:uppercase;color:var(--t-tx3)">Lots</span>
+        <button onclick="state.lots=Math.max(1,state.lots-1);updatePrecomputed();renderActionBar();renderMobileBar();" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:4px;font-weight:700;font-size:14px;background:var(--t-sf2);border:1px solid var(--t-bd);color:var(--t-tx);cursor:pointer">\u2212</button>
+        <input type="number" value="${state.lots}" onchange="state.lots=Math.max(1,Math.min(50,parseInt(this.value)||1));updatePrecomputed();renderActionBar();renderMobileBar();" class="font-mono" style="width:40px;padding:4px;border-radius:4px;text-align:center;font-size:14px;font-weight:700;outline:none;background:var(--t-bg);border:1px solid var(--t-bd);color:var(--t-tx)">
+        <button onclick="state.lots=Math.min(50,state.lots+1);updatePrecomputed();renderActionBar();renderMobileBar();" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:4px;font-weight:700;font-size:14px;background:var(--t-sf2);border:1px solid var(--t-bd);color:var(--t-tx);cursor:pointer">+</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px;padding-bottom:max(10px,env(safe-area-inset-bottom))">
+      <button data-testid="button-buy-ce-mobile" ${hasCe?'':'disabled'} onclick="fire('B','CE')" class="font-mono" style="padding:16px;border-radius:12px;font-size:15px;font-weight:700;color:white;letter-spacing:.05em;border:none;cursor:pointer;background:linear-gradient(135deg,#10b981,#059669);opacity:${hasCe?1:0.25};box-shadow:${hasCe?'0 3px 12px rgba(16,185,129,.35)':'none'}">BUY CE</button>
+      <button data-testid="button-sell-ce-mobile" ${hasCe?'':'disabled'} onclick="fire('S','CE')" class="font-mono" style="padding:16px;border-radius:12px;font-size:15px;font-weight:700;color:white;letter-spacing:.05em;border:none;cursor:pointer;background:linear-gradient(135deg,#ef4444,#dc2626);opacity:${hasCe?1:0.25};box-shadow:${hasCe?'0 3px 12px rgba(239,68,68,.35)':'none'}">SELL CE</button>
+      <button data-testid="button-buy-pe-mobile" ${hasPe?'':'disabled'} onclick="fire('B','PE')" class="font-mono" style="padding:16px;border-radius:12px;font-size:15px;font-weight:700;color:white;letter-spacing:.05em;border:none;cursor:pointer;background:linear-gradient(135deg,#10b981,#059669);opacity:${hasPe?1:0.25};box-shadow:${hasPe?'0 3px 12px rgba(16,185,129,.35)':'none'}">BUY PE</button>
+      <button data-testid="button-sell-pe-mobile" ${hasPe?'':'disabled'} onclick="fire('S','PE')" class="font-mono" style="padding:16px;border-radius:12px;font-size:15px;font-weight:700;color:white;letter-spacing:.05em;border:none;cursor:pointer;background:linear-gradient(135deg,#ef4444,#dc2626);opacity:${hasPe?1:0.25};box-shadow:${hasPe?'0 3px 12px rgba(239,68,68,.35)':'none'}">SELL PE</button>
+    </div>
+  `;
+}
+
+function renderToasts() {
+  let c = $('#toast-container');
+  if (!c) { c = h('div','',{id:'toast-container',style:{position:'fixed',bottom:'16px',right:'16px',zIndex:999,display:'flex',flexDirection:'column-reverse',gap:'6px',pointerEvents:'none'}}); document.body.appendChild(c); }
+  const icons = {success:'\u2705',error:'\u274C',info:'\u2139\uFE0F'};
+  const styles = {
+    success:{bg:'rgba(16,185,129,.15)',color:'var(--t-gn)',border:'rgba(16,185,129,.15)'},
+    error:{bg:'rgba(239,68,68,.15)',color:'var(--t-rd)',border:'rgba(239,68,68,.15)'},
+    info:{bg:'rgba(59,130,246,.15)',color:'var(--t-bl)',border:'rgba(59,130,246,.2)'},
+  };
+  c.innerHTML = state.toasts.map(t => {
+    const s = styles[t.type]||styles.info;
+    return `<div class="animate-toast-in" style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:8px;font-size:12px;font-weight:500;max-width:360px;backdrop-filter:blur(4px);background:${s.bg};color:${s.color};border:1px solid ${s.border};box-shadow:0 4px 12px rgba(0,0,0,.4)" data-testid="toast-${t.type}"><span style="font-size:14px;flex-shrink:0">${icons[t.type]}</span><span style="flex:1">${t.msg}</span></div>`;
+  }).join('');
+}
+
+// ─── Keyboard shortcuts ───
+document.addEventListener('keydown', e => {
+  if (state.authStep !== 'terminal') return;
+  if (['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
+  if (e.code === 'Numpad1' || (e.key === '1' && !e.ctrlKey && !e.altKey && !e.metaKey)) { e.preventDefault(); fire('B','CE'); }
+  else if (e.code === 'Numpad3' || (e.key === '3' && !e.ctrlKey && !e.altKey && !e.metaKey)) { e.preventDefault(); fire('S','CE'); }
+  else if (e.code === 'Numpad7' || (e.key === '7' && !e.ctrlKey && !e.altKey && !e.metaKey)) { e.preventDefault(); fire('B','PE'); }
+  else if (e.code === 'Numpad9' || (e.key === '9' && !e.ctrlKey && !e.altKey && !e.metaKey)) { e.preventDefault(); fire('S','PE'); }
+});
+
+// ─── Clock ───
+function tickClock() {
+  const n = new Date();
+  state.clock = String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0') + ':' + String(n.getSeconds()).padStart(2,'0');
+  const el = $('#clock-el');
+  if (el) el.textContent = state.clock;
+}
+tickClock();
+clockIv = setInterval(tickClock, 1000);
+
+// ─── Init: check session ───
+(async () => {
+  try {
+    const r = await api('/api/auth/session');
+    if (r.authenticated) {
+      state.authEmail = r.email || '';
+      state.traderId = r.traderId || '';
+      if (r.kotakConnected) {
+        state.greeting = r.greeting || '';
+        state.authStep = 'terminal';
+        render();
+        startTerminal();
+        return;
+      } else if (r.hasCredentials) {
+        state.authStep = 'totp';
+      } else {
+        state.authStep = 'credentials';
+      }
+    }
+  } catch {}
+  render();
+})();
+</script>
+</body>
+</html>
