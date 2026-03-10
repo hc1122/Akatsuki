@@ -258,7 +258,7 @@ async function loadChain() {
   } catch {}
   state.chainLoading = false;
   updatePrecomputed();
-  renderChain(); renderActionBar();
+  renderChain(); renderActionBar(); renderMobileBar();
 }
 
 async function loadPositions() {
@@ -268,6 +268,7 @@ async function loadPositions() {
     state.positions = (st === 'ok' && r.data?.length) ? r.data : [];
   } catch { state.positions = []; }
   renderPositions();
+  renderControls();
   startLtpPolling();
 }
 
@@ -298,6 +299,7 @@ async function loadOrders() {
     } else state.orders = [];
   } catch { state.orders = []; }
   renderOrders();
+  renderControls();
 }
 
 async function loadLimits() {
