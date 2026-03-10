@@ -264,7 +264,7 @@ export default function Terminal() {
       } catch {}
     };
     fetchLtps();
-    const ltpIv = setInterval(fetchLtps, 2000);
+    const ltpIv = setInterval(fetchLtps, 1000);
     return () => clearInterval(ltpIv);
   }, [authStep, positions]);
 
