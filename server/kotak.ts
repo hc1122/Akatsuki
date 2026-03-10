@@ -2,11 +2,13 @@ import { Agent } from "undici";
 import { log } from "./index";
 
 const keepAliveDispatcher = new Agent({
-  keepAliveTimeout: 30000,
-  keepAliveMaxTimeout: 60000,
-  connections: 10,
+  keepAliveTimeout: 60000,
+  keepAliveMaxTimeout: 120000,
+  connections: 20,
   pipelining: 1,
 });
+
+export { keepAliveDispatcher };
 
 function fa(url: string, opts: any = {}): Promise<Response> {
   return fetch(url, { ...opts, dispatcher: keepAliveDispatcher } as any);
@@ -148,19 +150,6 @@ export async function fetchQuote(s: KotakSession, seg: string, sym: string, filt
   }
 }
 
-export async function fetchQuoteByToken(s: KotakSession, seg: string, token: string, filter = "ltp") {
-  try {
-    const url = `${s.baseUrl}/script-details/1.0/quotes/${seg}/${token}/${filter}`;
-    const res = await fa(url, { headers: quoteHeaders(s) });
-    const data = await res.json() as any;
-    const result = Array.isArray(data) && data.length > 0 ? data[0] : data;
-    return result;
-  } catch (e: any) {
-    log(`Quote(tok) error ${seg}/${token}: ${e.message}`, "kotak");
-    return {};
-  }
-}
-
 export async function getSpot(s: KotakSession, idx: string): Promise<number> {
   const map: Record<string, [string, string]> = {
     "NIFTY": ["nse_cm", "Nifty 50"],
@@ -197,6 +186,15 @@ export async function placeOrder(
     log(`Order error: ${e.message}`, "kotak");
     return { stat: "Not_Ok", emsg: e.message };
   }
+}
+
+export async function fastOrder(s: KotakSession, jData: string) {
+  const res = await fa(`${s.baseUrl}/quick/order/rule/ms/place`, {
+    method: "POST",
+    headers: postHeaders(s),
+    body: `jData=${jData}`,
+  });
+  return await res.json();
 }
 
 export async function cancelOrder(s: KotakSession, on: string) {

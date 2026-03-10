@@ -314,41 +314,21 @@ export async function registerRoutes(
     (async () => {
       try {
         const t0 = Date.now();
-        const result = await fetch(`${s.baseUrl}/quick/order/rule/ms/place`, {
-          method: "POST",
-          headers: {
-            "accept": "application/json",
-            "Auth": s.sessionToken!,
-            "Sid": s.sessionSid!,
-            "neo-fin-key": "neotradeapi",
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: `jData=${jData}`,
-        });
-        const data = await result.json() as any;
+        const result = await kotak.fastOrder(s, jData);
+        const data = result as any;
         const elapsed = Date.now() - t0;
         log(`FAST ORDER ${elapsed}ms [${userId}]: ${JSON.stringify(data)}`, "order");
 
         if (data.stat === "Not_Ok" && ((data.errMsg || "") + (data.emsg || "")).includes("LTP")) {
           try {
             const parsed = JSON.parse(jData);
-            const q = await kotak.fetchQuote(s, parsed.es, parsed.ts, "ltp");
+            const tok = parsed.tok || "";
+            const q = tok ? await kotak.fetchQuote(s, parsed.es, tok, "ltp") : await kotak.fetchQuote(s, parsed.es, parsed.ts, "ltp");
             const ltp = parseFloat(q?.ltp || "0");
             if (ltp > 0) {
               const pr = (ltp * (parsed.tt === "B" ? 1.002 : 0.998)).toFixed(2);
               const limitData = JSON.stringify({ ...parsed, pt: "L", pr });
-              const r2 = await fetch(`${s.baseUrl}/quick/order/rule/ms/place`, {
-                method: "POST",
-                headers: {
-                  "accept": "application/json",
-                  "Auth": s.sessionToken!,
-                  "Sid": s.sessionSid!,
-                  "neo-fin-key": "neotradeapi",
-                  "Content-Type": "application/x-www-form-urlencoded",
-                },
-                body: `jData=${limitData}`,
-              });
-              const d2 = await r2.json() as any;
+              const d2 = await kotak.fastOrder(s, limitData);
               broadcastToUser(userId, { type: "order_result", data: d2, action: action || "", elapsed });
               return;
             }
@@ -373,8 +353,9 @@ export async function registerRoutes(
     let r = await kotak.placeOrder(s, es, ts, tt, qty);
 
     if (r.stat === "Not_Ok" && ((r.errMsg || "") + (r.emsg || "")).includes("LTP")) {
-      if (symbol && es) {
-        const q = await kotak.fetchQuote(s, es, symbol, "ltp");
+      const tok = req.body.tok || symbol || "";
+      if (tok && es) {
+        const q = await kotak.fetchQuote(s, es, tok, "ltp");
         const ltp = parseFloat(q?.ltp || "0");
         if (ltp > 0) {
           const pr = (ltp * (tt === "B" ? 1.002 : 0.998)).toFixed(2);
@@ -406,50 +387,11 @@ export async function registerRoutes(
     if (!s) return;
     const posData: any = await kotak.getPositions(s);
     if (posData?.stat?.toLowerCase() === "ok" && Array.isArray(posData.data)) {
-      const enrichPromises = posData.data.map(async (p: any) => {
-        const buyQ = parseInt(p.flBuyQty ?? p.cfBuyQty ?? p.buyQty ?? "0");
-        const sellQ = parseInt(p.flSellQty ?? p.cfSellQty ?? p.sellQty ?? "0");
-        const netQty = p.netQty !== undefined ? parseInt(p.netQty) : (buyQ - sellQ);
+      for (const p of posData.data) {
         const ba = parseFloat(p.buyAmt ?? p.cfBuyAmt ?? "0");
         const sa = parseFloat(p.sellAmt ?? p.cfSellAmt ?? "0");
-        if (netQty !== 0) {
-          try {
-            const seg = p.exSeg || p.seg || "nse_fo";
-            const sym = p.trdSym || "";
-            const tok = p.tok || "";
-            log(`OPEN POS: ${sym} tok=${tok} netQty=${netQty} ba=${ba} sa=${sa}`, "debug");
-            let ltp = 0;
-            if (tok) {
-              const q = await kotak.fetchQuote(s, seg, tok, "ltp");
-              ltp = parseFloat(q?.ltp || "0");
-            }
-            if (ltp <= 0 && sym) {
-              const q2 = await kotak.fetchQuote(s, seg, sym, "ltp");
-              ltp = parseFloat(q2?.ltp || "0");
-            }
-            log(`LTP for ${sym}: ${ltp}`, "debug");
-            if (ltp > 0) {
-              p._ltp = ltp;
-              if (netQty > 0) {
-                p._pnl = (ltp * netQty) - ba;
-              } else {
-                p._pnl = sa - (ltp * Math.abs(netQty));
-              }
-              log(`CALC PNL: ${sym} _pnl=${p._pnl}`, "debug");
-            } else {
-              p._pnl = sa - ba;
-              log(`LTP=0, fallback PNL: ${sym} _pnl=${p._pnl}`, "debug");
-            }
-          } catch (err: any) {
-            log(`LTP fetch error for ${p.trdSym}: ${err.message}`, "debug");
-            p._pnl = sa - ba;
-          }
-        } else {
-          p._pnl = sa - ba;
-        }
-        return p;
-      });
-      posData.data = await Promise.all(enrichPromises);
+        p._pnl = sa - ba;
+      }
     }
     res.json(posData);
   });
@@ -478,22 +420,6 @@ export async function registerRoutes(
       } catch {}
     }));
     res.json({ stat: "ok", data: result });
-  });
-
-  app.get("/api/test-ltp/:seg/:tok", async (req, res) => {
-    const s = kotak.getAnyLoggedInSession();
-    if (!s) return res.json({ error: "No Kotak session" });
-    const { seg, tok } = req.params;
-    log(`TEST LTP: seg=${seg} tok=${tok}`, "debug");
-    try {
-      const q1 = await kotak.fetchQuoteByToken(s, seg, tok, "ltp");
-      log(`TEST token result: ${JSON.stringify(q1).slice(0,300)}`, "debug");
-      const q2 = await kotak.fetchQuote(s, seg, tok, "ltp");
-      log(`TEST neosym(tok) result: ${JSON.stringify(q2).slice(0,300)}`, "debug");
-      res.json({ tokenBased: q1, neosymWithToken: q2 });
-    } catch (e: any) {
-      res.json({ error: e.message });
-    }
   });
 
   app.get("/api/limits", async (req, res) => {

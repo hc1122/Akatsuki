@@ -384,12 +384,13 @@ export default function Terminal() {
       const ts = (selectedStrike as any)[`${p}_ts`];
       const es = (selectedStrike as any)[`${p}_seg`];
       const lotSize = (selectedStrike as any)[`${p}_lot`] || 1;
+      const tok = (selectedStrike as any)[`${p}_symbol`] || "";
       if (!ts) continue;
       for (const tt of ["B", "S"]) {
         const qty = lotSize * lots;
         builds[`${tt}_${ot}`] = JSON.stringify({
           am: "NO", dq: "0", es, mp: "0", pc: "MIS", pf: "N",
-          pr: "0", pt: "MKT", qt: String(qty), rt: "DAY", tp: "0", ts, tt,
+          pr: "0", pt: "MKT", qt: String(qty), rt: "DAY", tp: "0", ts, tt, tok,
         });
       }
     }
