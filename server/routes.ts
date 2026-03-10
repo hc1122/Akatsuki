@@ -404,7 +404,12 @@ export async function registerRoutes(
   app.get("/api/positions", async (req, res) => {
     const s = requireKotak(req, res);
     if (!s) return;
-    res.json(await kotak.getPositions(s));
+    const posData = await kotak.getPositions(s);
+    if ((posData as any)?.data?.[0]) {
+      log(`POSITION FIELDS: ${JSON.stringify(Object.keys((posData as any).data[0]))}`, "debug");
+      log(`POSITION SAMPLE: ${JSON.stringify((posData as any).data[0])}`, "debug");
+    }
+    res.json(posData);
   });
 
   app.get("/api/limits", async (req, res) => {
