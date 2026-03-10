@@ -420,7 +420,7 @@ export async function registerRoutes(
             log(`OPEN POS: ${sym} tok=${tok} netQty=${netQty} ba=${ba} sa=${sa}`, "debug");
             let ltp = 0;
             if (tok) {
-              const q = await kotak.fetchQuoteByToken(s, seg, tok, "ltp");
+              const q = await kotak.fetchQuote(s, seg, tok, "ltp");
               ltp = parseFloat(q?.ltp || "0");
             }
             if (ltp <= 0 && sym) {
@@ -466,7 +466,7 @@ export async function registerRoutes(
       try {
         let ltp = 0;
         if (t.tok) {
-          const q = await kotak.fetchQuoteByToken(s, t.seg, t.tok, "ltp");
+          const q = await kotak.fetchQuote(s, t.seg, t.tok, "ltp");
           ltp = parseFloat(q?.ltp || "0");
         }
         if (ltp <= 0 && t.sym) {
@@ -478,6 +478,22 @@ export async function registerRoutes(
       } catch {}
     }));
     res.json({ stat: "ok", data: result });
+  });
+
+  app.get("/api/test-ltp/:seg/:tok", async (req, res) => {
+    const s = kotak.getAnyLoggedInSession();
+    if (!s) return res.json({ error: "No Kotak session" });
+    const { seg, tok } = req.params;
+    log(`TEST LTP: seg=${seg} tok=${tok}`, "debug");
+    try {
+      const q1 = await kotak.fetchQuoteByToken(s, seg, tok, "ltp");
+      log(`TEST token result: ${JSON.stringify(q1).slice(0,300)}`, "debug");
+      const q2 = await kotak.fetchQuote(s, seg, tok, "ltp");
+      log(`TEST neosym(tok) result: ${JSON.stringify(q2).slice(0,300)}`, "debug");
+      res.json({ tokenBased: q1, neosymWithToken: q2 });
+    } catch (e: any) {
+      res.json({ error: e.message });
+    }
   });
 
   app.get("/api/limits", async (req, res) => {
