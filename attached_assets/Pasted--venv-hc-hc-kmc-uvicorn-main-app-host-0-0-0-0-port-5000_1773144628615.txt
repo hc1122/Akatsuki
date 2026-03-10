@@ -1,0 +1,37 @@
+(venv) hc@hc:~/kmc$ uvicorn main:app --host 0.0.0.0 --port 5000 --loop uvloop           INFO:     Started server process [183840]
+INFO:     Waiting for application startup.
+ERROR:    Traceback (most recent call last):
+  File "/home/hc/kmc/venv/lib/python3.12/site-packages/starlette/routing.py", line 693, in lifespan
+    async with self.lifespan_context(app) as maybe_state:
+  File "/usr/lib/python3.12/contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/hc/kmc/main.py", line 555, in lifespan
+    await init_db()
+  File "/home/hc/kmc/main.py", line 55, in init_db
+    db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/hc/kmc/venv/lib/python3.12/site-packages/asyncpg/pool.py", line 403, in _async__init__
+    await self._initialize()
+  File "/home/hc/kmc/venv/lib/python3.12/site-packages/asyncpg/pool.py", line 430, in _initialize
+    await first_ch.connect()
+  File "/home/hc/kmc/venv/lib/python3.12/site-packages/asyncpg/pool.py", line 128, in connect
+    self._con = await self._pool._get_new_connection()
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/hc/kmc/venv/lib/python3.12/site-packages/asyncpg/pool.py", line 502, in _get_new_connection
+    con = await connection.connect(
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/hc/kmc/venv/lib/python3.12/site-packages/asyncpg/connection.py", line 2329, in connect
+    return await connect_utils._connect(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/hc/kmc/venv/lib/python3.12/site-packages/asyncpg/connect_utils.py", line 991, in _connect
+    conn = await _connect_addr(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/home/hc/kmc/venv/lib/python3.12/site-packages/asyncpg/connect_utils.py", line 833, in _connect_addr
+    return await __connect_addr(params_retry, False, *args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/hc/kmc/venv/lib/python3.12/site-packages/asyncpg/connect_utils.py", line 876, in __connect_addr
+    await connected
+asyncpg.exceptions.InvalidPasswordError: password authentication failed for user "Akatsuki"
+
+ERROR:    Application startup failed. Exiting.
