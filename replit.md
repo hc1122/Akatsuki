@@ -27,6 +27,7 @@ Multi-user options scalping terminal for Kotak Securities NEO API. Dark terminal
 - `client/src/index.css` - Dark terminal theme with CSS variables (--t-* prefix)
 
 ## Speed Optimizations
+- **HTTP Keep-Alive (undici Agent)**: Persistent connection pool to Kotak API servers via `undici.Agent` dispatcher. Reuses TCP+TLS connections across requests, eliminating handshake overhead (~100ms saved per call after warmup).
 - **Pre-computed order payloads**: All 4 order payloads (BUY/SELL CE/PE) are pre-built in refs when strike/lots change. Zero computation on keypress.
 - **Fire-and-forget**: `/api/order/fast` returns immediately ("sent") and fires Kotak order in background. Result delivered via WebSocket with timing info.
 - **Refs for hot path**: `strikeRef`, `lotsRef`, `precomputedRef` avoid React re-render overhead on the order dispatch path.

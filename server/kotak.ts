@@ -1,4 +1,16 @@
+import { Agent } from "undici";
 import { log } from "./index";
+
+const keepAliveDispatcher = new Agent({
+  keepAliveTimeout: 30000,
+  keepAliveMaxTimeout: 60000,
+  connections: 10,
+  pipelining: 1,
+});
+
+function fa(url: string, opts: any = {}): Promise<Response> {
+  return fetch(url, { ...opts, dispatcher: keepAliveDispatcher } as any);
+}
 
 export interface KotakSession {
   accessToken: string;
@@ -65,7 +77,7 @@ function postHeaders(s: KotakSession): Record<string, string> {
 
 export async function loginWithTotp(s: KotakSession, totp: string) {
   try {
-    const res = await fetch("https://mis.kotaksecurities.com/login/1.0/tradeApiLogin", {
+    const res = await fa("https://mis.kotaksecurities.com/login/1.0/tradeApiLogin", {
       method: "POST",
       headers: {
         "Authorization": s.accessToken,
@@ -93,7 +105,7 @@ export async function loginWithTotp(s: KotakSession, totp: string) {
 
 export async function validateMpin(s: KotakSession) {
   try {
-    const res = await fetch("https://mis.kotaksecurities.com/login/1.0/tradeApiValidate", {
+    const res = await fa("https://mis.kotaksecurities.com/login/1.0/tradeApiValidate", {
       method: "POST",
       headers: {
         "Authorization": s.accessToken,
@@ -125,7 +137,7 @@ export async function validateMpin(s: KotakSession) {
 export async function fetchQuote(s: KotakSession, seg: string, sym: string, filter = "ltp") {
   try {
     const url = `${s.baseUrl}/script-details/1.0/quotes/neosymbol/${seg}|${sym}/${filter}`;
-    const res = await fetch(url, { headers: quoteHeaders(s) });
+    const res = await fa(url, { headers: quoteHeaders(s) });
     const data = await res.json() as any;
     return Array.isArray(data) && data.length > 0 ? data[0] : data;
   } catch (e: any) {
@@ -158,7 +170,7 @@ export async function placeOrder(
   });
   log(`ORDER [${s.userId}]: ${jData}`, "kotak");
   try {
-    const res = await fetch(`${s.baseUrl}/quick/order/rule/ms/place`, {
+    const res = await fa(`${s.baseUrl}/quick/order/rule/ms/place`, {
       method: "POST",
       headers: postHeaders(s),
       body: `jData=${jData}`,
@@ -174,7 +186,7 @@ export async function placeOrder(
 
 export async function cancelOrder(s: KotakSession, on: string) {
   try {
-    const res = await fetch(`${s.baseUrl}/quick/order/cancel`, {
+    const res = await fa(`${s.baseUrl}/quick/order/cancel`, {
       method: "POST",
       headers: postHeaders(s),
       body: `jData=${JSON.stringify({ on, am: "NO" })}`,
@@ -189,7 +201,7 @@ export async function getOrderbook(s: KotakSession) {
   try {
     const h = { ...postHeaders(s) };
     delete h["Content-Type"];
-    const res = await fetch(`${s.baseUrl}/quick/user/orders`, { headers: h });
+    const res = await fa(`${s.baseUrl}/quick/user/orders`, { headers: h });
     return await res.json();
   } catch (e: any) {
     return { stat: "Not_Ok", emsg: e.message };
@@ -200,7 +212,7 @@ export async function getPositions(s: KotakSession) {
   try {
     const h = { ...postHeaders(s) };
     delete h["Content-Type"];
-    const res = await fetch(`${s.baseUrl}/quick/user/positions`, { headers: h });
+    const res = await fa(`${s.baseUrl}/quick/user/positions`, { headers: h });
     return await res.json();
   } catch (e: any) {
     return { stat: "Not_Ok", emsg: e.message };
@@ -209,7 +221,7 @@ export async function getPositions(s: KotakSession) {
 
 export async function getLimits(s: KotakSession) {
   try {
-    const res = await fetch(`${s.baseUrl}/quick/user/limits`, {
+    const res = await fa(`${s.baseUrl}/quick/user/limits`, {
       method: "POST",
       headers: postHeaders(s),
       body: `jData=${JSON.stringify({ seg: "ALL", exch: "ALL", prod: "ALL" })}`,
@@ -223,7 +235,7 @@ export async function getLimits(s: KotakSession) {
 export async function fetchScripPaths(s: KotakSession): Promise<string[]> {
   try {
     const url = `${s.baseUrl}/script-details/1.0/masterscrip/file-paths`;
-    const res = await fetch(url, { headers: quoteHeaders(s) });
+    const res = await fa(url, { headers: quoteHeaders(s) });
     const data = await res.json() as any;
     return data?.data?.filesPaths || [];
   } catch (e: any) {
