@@ -416,23 +416,29 @@ export async function registerRoutes(
           try {
             const seg = p.exSeg || p.seg || "nse_fo";
             const sym = p.trdSym || "";
-            log(`OPEN POS: ${sym} netQty=${netQty} ba=${ba} sa=${sa}`, "debug");
-            if (sym) {
-              const q = await kotak.fetchQuote(s, seg, sym, "ltp");
-              const ltp = parseFloat(q?.ltp || "0");
-              log(`LTP for ${sym}: ${ltp} (raw: ${JSON.stringify(q)})`, "debug");
-              if (ltp > 0) {
-                p._ltp = ltp;
-                if (netQty > 0) {
-                  p._pnl = (ltp * netQty) - ba;
-                } else {
-                  p._pnl = sa - (ltp * Math.abs(netQty));
-                }
-                log(`CALC PNL: ${sym} _pnl=${p._pnl}`, "debug");
+            const tok = p.tok || "";
+            log(`OPEN POS: ${sym} tok=${tok} netQty=${netQty} ba=${ba} sa=${sa}`, "debug");
+            let ltp = 0;
+            if (tok) {
+              const q = await kotak.fetchQuoteByToken(s, seg, tok, "ltp");
+              ltp = parseFloat(q?.ltp || "0");
+            }
+            if (ltp <= 0 && sym) {
+              const q2 = await kotak.fetchQuote(s, seg, sym, "ltp");
+              ltp = parseFloat(q2?.ltp || "0");
+            }
+            log(`LTP for ${sym}: ${ltp}`, "debug");
+            if (ltp > 0) {
+              p._ltp = ltp;
+              if (netQty > 0) {
+                p._pnl = (ltp * netQty) - ba;
               } else {
-                p._pnl = sa - ba;
-                log(`LTP=0, fallback PNL: ${sym} _pnl=${p._pnl}`, "debug");
+                p._pnl = sa - (ltp * Math.abs(netQty));
               }
+              log(`CALC PNL: ${sym} _pnl=${p._pnl}`, "debug");
+            } else {
+              p._pnl = sa - ba;
+              log(`LTP=0, fallback PNL: ${sym} _pnl=${p._pnl}`, "debug");
             }
           } catch (err: any) {
             log(`LTP fetch error for ${p.trdSym}: ${err.message}`, "debug");
@@ -456,11 +462,19 @@ export async function registerRoutes(
       return res.json({ stat: "ok", data: {} });
     }
     const result: Record<string, number> = {};
-    await Promise.all(tokens.map(async (t: { seg: string; sym: string }) => {
+    await Promise.all(tokens.map(async (t: { seg: string; sym: string; tok?: string }) => {
       try {
-        const q = await kotak.fetchQuote(s, t.seg, t.sym, "ltp");
-        const ltp = parseFloat(q?.ltp || "0");
+        let ltp = 0;
+        if (t.tok) {
+          const q = await kotak.fetchQuoteByToken(s, t.seg, t.tok, "ltp");
+          ltp = parseFloat(q?.ltp || "0");
+        }
+        if (ltp <= 0 && t.sym) {
+          const q2 = await kotak.fetchQuote(s, t.seg, t.sym, "ltp");
+          ltp = parseFloat(q2?.ltp || "0");
+        }
         if (ltp > 0) result[t.sym] = ltp;
+        else log(`LTP=0 for ${t.sym} tok=${t.tok}`, "debug");
       } catch {}
     }));
     res.json({ stat: "ok", data: result });

@@ -139,9 +139,24 @@ export async function fetchQuote(s: KotakSession, seg: string, sym: string, filt
     const url = `${s.baseUrl}/script-details/1.0/quotes/neosymbol/${seg}|${sym}/${filter}`;
     const res = await fa(url, { headers: quoteHeaders(s) });
     const data = await res.json() as any;
-    return Array.isArray(data) && data.length > 0 ? data[0] : data;
+    const result = Array.isArray(data) && data.length > 0 ? data[0] : data;
+    if (!result?.ltp) log(`Quote empty for ${seg}|${sym}: ${JSON.stringify(data).slice(0,200)}`, "kotak");
+    return result;
   } catch (e: any) {
-    log(`Quote error: ${e.message}`, "kotak");
+    log(`Quote error ${seg}|${sym}: ${e.message}`, "kotak");
+    return {};
+  }
+}
+
+export async function fetchQuoteByToken(s: KotakSession, seg: string, token: string, filter = "ltp") {
+  try {
+    const url = `${s.baseUrl}/script-details/1.0/quotes/${seg}/${token}/${filter}`;
+    const res = await fa(url, { headers: quoteHeaders(s) });
+    const data = await res.json() as any;
+    const result = Array.isArray(data) && data.length > 0 ? data[0] : data;
+    return result;
+  } catch (e: any) {
+    log(`Quote(tok) error ${seg}/${token}: ${e.message}`, "kotak");
     return {};
   }
 }

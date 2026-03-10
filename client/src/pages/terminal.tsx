@@ -257,7 +257,7 @@ export default function Terminal() {
         return nq !== 0;
       });
       if (open.length === 0) return;
-      const tokens = open.map(p => ({ seg: p.exSeg || "nse_fo", sym: p.trdSym || "" }));
+      const tokens = open.map(p => ({ seg: p.exSeg || "nse_fo", sym: p.trdSym || "", tok: p.tok || "" }));
       try {
         const r = await (await fetch("/api/ltp", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tokens }) })).json();
         if (r.stat === "ok" && r.data) setLiveLtps(prev => ({ ...prev, ...r.data }));
