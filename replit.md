@@ -84,17 +84,6 @@ Multi-user options scalping terminal for Kotak Securities NEO API. Dark terminal
 - App icons: 192x192 and 512x512 in `client/public/icons/` (Replit) and `python-server/static/icons/` (Python)
 - Theme color: #3b82f6 (blue), background: #06080d (dark)
 
-## Android APK (Standalone)
-- Full native Android app in `android-app/` directory
-- WebView-based with Kotlin NativeBridge for HTTP calls (bypasses CORS)
-- OkHttp for all network requests with connection pooling
-- SharedPreferences for credential storage (no database needed)
-- Single-user: credentials → TOTP → trading terminal
-- All backend logic ported to JavaScript: CSV parsing, options DB, order execution
-- Zero server dependency — all Kotak API calls made directly from phone
-- Build on Ubuntu with Android SDK: `./gradlew assembleDebug`
-- Key files: `MainActivity.kt` (WebView + NativeBridge), `assets/index.html` (self-contained app)
-
 ## Responsive Layout
 - **Desktop (md+)**: Full action bar with CE/PE buttons flanking center strike info + lots control, keyboard shortcut hints visible, positions/orders side-by-side when both toggled open
 - **Mobile (<md)**: Compact header (clock/username hidden), P&L strip always visible above buttons, 2-column grid with large touch-friendly BUY/SELL buttons (CE left, PE right), active:scale press feedback
