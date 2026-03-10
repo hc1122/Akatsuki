@@ -448,6 +448,24 @@ export async function registerRoutes(
     res.json(posData);
   });
 
+  app.post("/api/ltp", async (req, res) => {
+    const s = requireKotak(req, res);
+    if (!s) return;
+    const { tokens } = req.body;
+    if (!Array.isArray(tokens) || tokens.length === 0) {
+      return res.json({ stat: "ok", data: {} });
+    }
+    const result: Record<string, number> = {};
+    await Promise.all(tokens.map(async (t: { seg: string; sym: string }) => {
+      try {
+        const q = await kotak.fetchQuote(s, t.seg, t.sym, "ltp");
+        const ltp = parseFloat(q?.ltp || "0");
+        if (ltp > 0) result[t.sym] = ltp;
+      } catch {}
+    }));
+    res.json({ stat: "ok", data: result });
+  });
+
   app.get("/api/limits", async (req, res) => {
     const s = requireKotak(req, res);
     if (!s) return;

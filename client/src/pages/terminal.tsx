@@ -57,6 +57,7 @@ export default function Terminal() {
   const [positions, setPositions] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [funds, setFunds] = useState({ available: "--", used: "--", collateral: "--" });
+  const [liveLtps, setLiveLtps] = useState<Record<string, number>>({});
   const [wsConnected, setWsConnected] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [clock, setClock] = useState("");
@@ -236,7 +237,7 @@ export default function Terminal() {
     loadPositions();
     loadOrders();
     const limitsIv = setInterval(loadLimits, 30000);
-    const posIv = setInterval(loadPositions, 10000);
+    const posIv = setInterval(loadPositions, 5000);
     return () => {
       clearInterval(limitsIv);
       clearInterval(posIv);
@@ -245,6 +246,27 @@ export default function Terminal() {
       if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
     };
   }, [authStep]);
+
+  useEffect(() => {
+    if (authStep !== "terminal") return;
+    const fetchLtps = async () => {
+      const open = positions.filter(p => {
+        const bq = parseInt(p.flBuyQty ?? p.cfBuyQty ?? "0");
+        const sq = parseInt(p.flSellQty ?? p.cfSellQty ?? "0");
+        const nq = p.netQty !== undefined ? parseInt(p.netQty) : (bq - sq);
+        return nq !== 0;
+      });
+      if (open.length === 0) return;
+      const tokens = open.map(p => ({ seg: p.exSeg || "nse_fo", sym: p.trdSym || "" }));
+      try {
+        const r = await (await fetch("/api/ltp", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tokens }) })).json();
+        if (r.stat === "ok" && r.data) setLiveLtps(prev => ({ ...prev, ...r.data }));
+      } catch {}
+    };
+    fetchLtps();
+    const ltpIv = setInterval(fetchLtps, 2000);
+    return () => clearInterval(ltpIv);
+  }, [authStep, positions]);
 
   useEffect(() => {
     if (authStep !== "terminal") return;
@@ -443,9 +465,18 @@ export default function Terminal() {
     return buyQ - sellQ;
   };
   const getPnl = (p: any) => {
-    if (p._pnl !== undefined) return parseFloat(p._pnl);
     const ba = parseFloat(p.buyAmt ?? p.cfBuyAmt ?? 0);
     const sa = parseFloat(p.sellAmt ?? p.cfSellAmt ?? 0);
+    const nq = getNetQty(p);
+    if (nq !== 0) {
+      const sym = p.trdSym || "";
+      const ltp = liveLtps[sym] || (p._ltp ? parseFloat(p._ltp) : 0);
+      if (ltp > 0) {
+        if (nq > 0) return (ltp * nq) - ba + sa;
+        else return sa - (ltp * Math.abs(nq)) - ba;
+      }
+    }
+    if (p._pnl !== undefined) return parseFloat(p._pnl);
     return sa - ba;
   };
 
@@ -853,7 +884,7 @@ export default function Terminal() {
                           <span className="text-[8px] px-1.5 py-px rounded font-semibold" style={isLong ? { background: "rgba(16,185,129,.08)", color: "var(--t-gn)" } : { background: "rgba(239,68,68,.08)", color: "var(--t-rd)" }}>{isLong ? "LONG" : "SHORT"}</span>
                         </span>
                         <span className="font-mono text-[10px]" style={{ color: "var(--t-tx2)" }}>Qty: {Math.abs(nq)}</span>
-                        <span className="font-mono text-[10px]" style={{ color: "var(--t-tx3)" }}>@{"\u20B9"}{avgPx}{p._ltp ? ` → ${p._ltp.toFixed(2)}` : ""}</span>
+                        <span className="font-mono text-[10px]" style={{ color: "var(--t-tx3)" }}>@{"\u20B9"}{avgPx}{(() => { const ltp = liveLtps[sym] || (p._ltp ? parseFloat(p._ltp) : 0); return ltp > 0 ? ` → ${ltp.toFixed(2)}` : ""; })()}</span>
                         <span className="font-mono font-semibold text-[11px]" style={{ color: pnl >= 0 ? "var(--t-gn)" : "var(--t-rd)" }}>{pnl >= 0 ? "+" : "-"}{"\u20B9"}{Math.abs(pnl).toFixed(2)}</span>
                       </div>
                     );
