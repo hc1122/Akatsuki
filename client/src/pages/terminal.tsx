@@ -1042,7 +1042,7 @@ function ToastContainer({ toasts }: { toasts: ToastItem[] }) {
     info: { bg: "rgba(59,130,246,.15)", color: "var(--t-bl)", border: "rgba(59,130,246,.2)" },
   };
   return (
-    <div className="fixed bottom-[200px] md:bottom-4 right-4 z-[999] flex flex-col-reverse gap-1.5 pointer-events-none [&>*]:pointer-events-auto">
+    <div className="fixed bottom-4 right-4 z-[999] flex flex-col-reverse gap-1.5 pointer-events-none">
       {toasts.map(t => {
         const s = styles[t.type] || styles.info;
         return (
