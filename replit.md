@@ -77,6 +77,13 @@ Multi-user options scalping terminal for Kotak Securities NEO API. Dark terminal
 - WebSocket real-time updates with status indicator
 - Multi-step auth screens with same dark aesthetic
 
+## PWA Support
+- Both Replit and Python versions include PWA (Progressive Web App) support
+- `manifest.json` + `sw.js` service worker for installability
+- Apple meta tags for iOS "Add to Home Screen" support
+- App icons: 192x192 and 512x512 in `client/public/icons/` (Replit) and `python-server/static/icons/` (Python)
+- Theme color: #3b82f6 (blue), background: #06080d (dark)
+
 ## Responsive Layout
 - **Desktop (md+)**: Full action bar with CE/PE buttons flanking center strike info + lots control, keyboard shortcut hints visible, positions/orders side-by-side when both toggled open
 - **Mobile (<md)**: Compact header (clock/username hidden), P&L strip always visible above buttons, 2-column grid with large touch-friendly BUY/SELL buttons (CE left, PE right), active:scale press feedback
