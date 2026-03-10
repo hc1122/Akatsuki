@@ -476,7 +476,7 @@ async def download_csv(index_name: str, ks: KotakSession):
     if not target:
         return
     log.info(f"Downloading {csv_key}...")
-    r = await http_client.get(target[0])
+    r = await http_client.get(target[0], headers=ks.quote_headers())
     text = r.text
     first_nl = text.find("\n")
     if first_nl > 0:
@@ -870,7 +870,10 @@ async def api_close_all(request: Request):
     for pos in pos_resp["data"]:
         buy_q = int(pos.get("flBuyQty", pos.get("cfBuyQty", pos.get("buyQty","0"))) or "0")
         sell_q = int(pos.get("flSellQty", pos.get("cfSellQty", pos.get("sellQty","0"))) or "0")
-        net_qty = int(pos["netQty"]) if "netQty" in pos else (buy_q - sell_q)
+        try:
+            net_qty = int(pos["netQty"]) if "netQty" in pos else (buy_q - sell_q)
+        except (ValueError, TypeError):
+            net_qty = buy_q - sell_q
         if net_qty == 0:
             continue
         ts = pos.get("trdSym","")

@@ -343,7 +343,7 @@ function pickStrike(i) {
   state.selectedStrike = state.chain[i];
   state.selectedIdx = i;
   updatePrecomputed();
-  renderChain(); renderActionBar();
+  renderChain(); renderActionBar(); renderMobileBar();
 }
 
 function switchIndex(idx) {
@@ -352,7 +352,7 @@ function switchIndex(idx) {
   loadExpiries(); refreshSpot();
   if (spotIv) clearInterval(spotIv);
   spotIv = setInterval(refreshSpot, 3000);
-  renderControls(); renderChain(); renderActionBar();
+  renderControls(); renderChain(); renderActionBar(); renderMobileBar();
 }
 
 async function closeAllPositions() {
