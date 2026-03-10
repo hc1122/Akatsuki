@@ -236,8 +236,10 @@ export default function Terminal() {
     loadPositions();
     loadOrders();
     const limitsIv = setInterval(loadLimits, 30000);
+    const posIv = setInterval(loadPositions, 10000);
     return () => {
       clearInterval(limitsIv);
+      clearInterval(posIv);
       if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null; }
       if (reconnectRef.current) { clearTimeout(reconnectRef.current); reconnectRef.current = null; }
       if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }

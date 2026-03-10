@@ -416,9 +416,11 @@ export async function registerRoutes(
           try {
             const seg = p.exSeg || p.seg || "nse_fo";
             const sym = p.trdSym || "";
+            log(`OPEN POS: ${sym} netQty=${netQty} ba=${ba} sa=${sa}`, "debug");
             if (sym) {
               const q = await kotak.fetchQuote(s, seg, sym, "ltp");
               const ltp = parseFloat(q?.ltp || "0");
+              log(`LTP for ${sym}: ${ltp} (raw: ${JSON.stringify(q)})`, "debug");
               if (ltp > 0) {
                 p._ltp = ltp;
                 if (netQty > 0) {
@@ -426,9 +428,16 @@ export async function registerRoutes(
                 } else {
                   p._pnl = sa - (ltp * Math.abs(netQty));
                 }
+                log(`CALC PNL: ${sym} _pnl=${p._pnl}`, "debug");
+              } else {
+                p._pnl = sa - ba;
+                log(`LTP=0, fallback PNL: ${sym} _pnl=${p._pnl}`, "debug");
               }
             }
-          } catch {}
+          } catch (err: any) {
+            log(`LTP fetch error for ${p.trdSym}: ${err.message}`, "debug");
+            p._pnl = sa - ba;
+          }
         } else {
           p._pnl = sa - ba;
         }
