@@ -441,14 +441,7 @@ export default function Terminal() {
     return buyQ - sellQ;
   };
   const getPnl = (p: any) => {
-    const netQ = getNetQty(p);
-    if (netQ !== 0) {
-      if (p.urmtom !== undefined && p.urmtom !== "") return parseFloat(p.urmtom);
-      if (p.unrealizedMTOM !== undefined) return parseFloat(p.unrealizedMTOM);
-      if (p.mtom !== undefined && p.mtom !== "") return parseFloat(p.mtom);
-    }
-    if (p.realisedprofit !== undefined && p.realisedprofit !== "") return parseFloat(p.realisedprofit);
-    if (p.realizedMTOM !== undefined) return parseFloat(p.realizedMTOM);
+    if (p._pnl !== undefined) return parseFloat(p._pnl);
     const ba = parseFloat(p.buyAmt ?? p.cfBuyAmt ?? 0);
     const sa = parseFloat(p.sellAmt ?? p.cfSellAmt ?? 0);
     return sa - ba;
@@ -858,7 +851,7 @@ export default function Terminal() {
                           <span className="text-[8px] px-1.5 py-px rounded font-semibold" style={isLong ? { background: "rgba(16,185,129,.08)", color: "var(--t-gn)" } : { background: "rgba(239,68,68,.08)", color: "var(--t-rd)" }}>{isLong ? "LONG" : "SHORT"}</span>
                         </span>
                         <span className="font-mono text-[10px]" style={{ color: "var(--t-tx2)" }}>Qty: {Math.abs(nq)}</span>
-                        <span className="font-mono text-[10px]" style={{ color: "var(--t-tx3)" }}>@{"\u20B9"}{avgPx}</span>
+                        <span className="font-mono text-[10px]" style={{ color: "var(--t-tx3)" }}>@{"\u20B9"}{avgPx}{p._ltp ? ` → ${p._ltp.toFixed(2)}` : ""}</span>
                         <span className="font-mono font-semibold text-[11px]" style={{ color: pnl >= 0 ? "var(--t-gn)" : "var(--t-rd)" }}>{pnl >= 0 ? "+" : "-"}{"\u20B9"}{Math.abs(pnl).toFixed(2)}</span>
                       </div>
                     );

@@ -404,10 +404,37 @@ export async function registerRoutes(
   app.get("/api/positions", async (req, res) => {
     const s = requireKotak(req, res);
     if (!s) return;
-    const posData = await kotak.getPositions(s);
-    if ((posData as any)?.data?.[0]) {
-      log(`POSITION FIELDS: ${JSON.stringify(Object.keys((posData as any).data[0]))}`, "debug");
-      log(`POSITION SAMPLE: ${JSON.stringify((posData as any).data[0])}`, "debug");
+    const posData: any = await kotak.getPositions(s);
+    if (posData?.stat?.toLowerCase() === "ok" && Array.isArray(posData.data)) {
+      const enrichPromises = posData.data.map(async (p: any) => {
+        const buyQ = parseInt(p.flBuyQty ?? p.cfBuyQty ?? p.buyQty ?? "0");
+        const sellQ = parseInt(p.flSellQty ?? p.cfSellQty ?? p.sellQty ?? "0");
+        const netQty = p.netQty !== undefined ? parseInt(p.netQty) : (buyQ - sellQ);
+        const ba = parseFloat(p.buyAmt ?? p.cfBuyAmt ?? "0");
+        const sa = parseFloat(p.sellAmt ?? p.cfSellAmt ?? "0");
+        if (netQty !== 0) {
+          try {
+            const seg = p.exSeg || p.seg || "nse_fo";
+            const sym = p.trdSym || "";
+            if (sym) {
+              const q = await kotak.fetchQuote(s, seg, sym, "ltp");
+              const ltp = parseFloat(q?.ltp || "0");
+              if (ltp > 0) {
+                p._ltp = ltp;
+                if (netQty > 0) {
+                  p._pnl = (ltp * netQty) - ba;
+                } else {
+                  p._pnl = sa - (ltp * Math.abs(netQty));
+                }
+              }
+            }
+          } catch {}
+        } else {
+          p._pnl = sa - ba;
+        }
+        return p;
+      });
+      posData.data = await Promise.all(enrichPromises);
     }
     res.json(posData);
   });
