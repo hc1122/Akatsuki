@@ -383,6 +383,7 @@ export async function registerRoutes(
     const s = requireKotak(req, res);
     if (!s) return;
     const data: any = await kotak.getOrderbook(s);
+    res.json(data);
     if (data?.stat?.toLowerCase() === "ok" && Array.isArray(data.data)) {
       if (!countedOrders.has(s.userId)) countedOrders.set(s.userId, new Set());
       const counted = countedOrders.get(s.userId)!;
@@ -396,11 +397,11 @@ export async function registerRoutes(
         }
       }
       if (newCount > 0) {
-        const newBrokerage = await storage.incrementBrokerageSaved(s.userId, newCount * 10);
-        broadcastToUser(s.userId, { type: "brokerage_update", brokerageSaved: newBrokerage });
+        storage.incrementBrokerageSaved(s.userId, newCount * 10).then(nb => {
+          broadcastToUser(s.userId, { type: "brokerage_update", brokerageSaved: nb });
+        }).catch(() => {});
       }
     }
-    res.json(data);
   });
 
   app.get("/api/positions", async (req, res) => {

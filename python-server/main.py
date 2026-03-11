@@ -848,9 +848,15 @@ async def api_orderbook(request: Request):
                 counted.add(ord_no)
                 new_count += 1
         if new_count > 0:
-            new_brokerage = await increment_brokerage_saved(ks.user_id, new_count * 10)
-            await broadcast_to_user(ks.user_id, {"type": "brokerage_update", "brokerageSaved": new_brokerage})
+            asyncio.create_task(_update_brokerage(ks.user_id, new_count * 10))
     return data
+
+async def _update_brokerage(user_id: str, amount: int):
+    try:
+        new_brokerage = await increment_brokerage_saved(user_id, amount)
+        await broadcast_to_user(user_id, {"type": "brokerage_update", "brokerageSaved": new_brokerage})
+    except Exception:
+        pass
 
 @app.get("/api/positions")
 async def api_positions(request: Request):
