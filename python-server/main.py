@@ -63,9 +63,14 @@ async def init_db():
             mpin TEXT,
             ucc TEXT,
             has_credentials BOOLEAN DEFAULT FALSE,
+            brokerage_saved INTEGER NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT NOW()
         )
     """)
+    try:
+        await db_pool.execute("ALTER TABLE traders ADD COLUMN IF NOT EXISTS brokerage_saved INTEGER NOT NULL DEFAULT 0")
+    except Exception:
+        pass
 
 async def create_trader(email: str, password: str) -> dict:
     tid = str(uuid.uuid4())
@@ -106,6 +111,17 @@ def decrypt_credentials(trader: dict) -> Optional[dict]:
         }
     except Exception:
         return None
+
+async def increment_brokerage_saved(tid: str, amount: int = 10) -> int:
+    row = await db_pool.fetchrow(
+        "UPDATE traders SET brokerage_saved = brokerage_saved + $1 WHERE id = $2 RETURNING brokerage_saved",
+        amount, tid
+    )
+    return row["brokerage_saved"] if row else 0
+
+async def get_brokerage_saved(tid: str) -> int:
+    row = await db_pool.fetchrow("SELECT brokerage_saved FROM traders WHERE id = $1", tid)
+    return row["brokerage_saved"] if row else 0
 
 # ─── Sessions (in-memory, cookie-based) ───
 
@@ -662,6 +678,7 @@ async def auth_session(request: Request):
         "kotakConnected": ks.logged_in if ks else False,
         "greeting": ks.greeting_name if ks else "",
         "traderId": trader["id"],
+        "brokerageSaved": trader.get("brokerage_saved", 0) or 0,
     }
 
 @app.post("/api/auth/logout")
@@ -776,11 +793,19 @@ async def _execute_fast_order(ks: KotakSession, j_data: str, action: str):
                         parsed["pt"] = "L"
                         parsed["pr"] = pr
                         d2 = await kotak_fast_order(ks, json.dumps(parsed))
-                        await broadcast_to_user(ks.user_id, {"type": "order_result", "data": d2, "action": action, "elapsed": elapsed})
+                        if d2.get("stat") == "Ok" or d2.get("nOrdNo"):
+                            new_brokerage = await increment_brokerage_saved(ks.user_id)
+                            await broadcast_to_user(ks.user_id, {"type": "order_result", "data": d2, "action": action, "elapsed": elapsed, "brokerageSaved": new_brokerage})
+                        else:
+                            await broadcast_to_user(ks.user_id, {"type": "order_result", "data": d2, "action": action, "elapsed": elapsed})
                         return
                 except Exception:
                     pass
-        await broadcast_to_user(ks.user_id, {"type": "order_result", "data": result, "action": action, "elapsed": elapsed})
+        if result.get("stat") == "Ok" or result.get("nOrdNo"):
+            new_brokerage = await increment_brokerage_saved(ks.user_id)
+            await broadcast_to_user(ks.user_id, {"type": "order_result", "data": result, "action": action, "elapsed": elapsed, "brokerageSaved": new_brokerage})
+        else:
+            await broadcast_to_user(ks.user_id, {"type": "order_result", "data": result, "action": action, "elapsed": elapsed})
     except Exception as e:
         log.error(f"FAST ORDER error: {e}")
         await broadcast_to_user(ks.user_id, {"type": "order_result", "data": {"stat":"Not_Ok","emsg":str(e)}, "action": action, "elapsed": -1})
@@ -802,7 +827,11 @@ async def api_order_quick(request: Request):
             if ltp > 0:
                 pr = f"{ltp * (1.002 if tt == 'B' else 0.998):.2f}"
                 r = await kotak_place_order(ks, es, ts, tt, lot, "MIS", "L", pr)
-    await broadcast_to_user(ks.user_id, {"type": "order_update", "data": r, "action": f"{'BUY' if tt=='B' else 'SELL'} {ts} x{lot}"})
+    if r.get("stat") == "Ok" or r.get("nOrdNo"):
+        new_brokerage = await increment_brokerage_saved(ks.user_id)
+        await broadcast_to_user(ks.user_id, {"type": "order_update", "data": r, "action": f"{'BUY' if tt=='B' else 'SELL'} {ts} x{lot}", "brokerageSaved": new_brokerage})
+    else:
+        await broadcast_to_user(ks.user_id, {"type": "order_update", "data": r, "action": f"{'BUY' if tt=='B' else 'SELL'} {ts} x{lot}"})
     return r
 
 @app.post("/api/order/cancel")
@@ -867,6 +896,7 @@ async def api_close_all(request: Request):
     if stat != "ok" or not pos_resp.get("data"):
         return {"status": "error", "message": "No positions to close"}
     results = []
+    success_count = 0
     for pos in pos_resp["data"]:
         buy_q = int(pos.get("flBuyQty", pos.get("cfBuyQty", pos.get("buyQty","0"))) or "0")
         sell_q = int(pos.get("flSellQty", pos.get("cfSellQty", pos.get("sellQty","0"))) or "0")
@@ -884,7 +914,12 @@ async def api_close_all(request: Request):
             continue
         r = await kotak_place_order(ks, es, ts, tt, qty)
         results.append({"symbol": ts, "qty": qty, "side": tt, "result": r})
-    await broadcast_to_user(ks.user_id, {"type": "close_all", "count": len(results)})
+        if r.get("stat") == "Ok" or r.get("nOrdNo"):
+            success_count += 1
+    new_brokerage = None
+    if success_count > 0:
+        new_brokerage = await increment_brokerage_saved(ks.user_id, success_count * 10)
+    await broadcast_to_user(ks.user_id, {"type": "close_all", "count": len(results), "brokerageSaved": new_brokerage})
     return {"status": "ok", "closed": len(results), "results": results}
 
 @app.post("/api/reload/{idx}")

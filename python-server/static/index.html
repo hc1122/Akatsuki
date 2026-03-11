@@ -73,6 +73,7 @@ let state = {
   selectedStrike: null, selectedIdx: -1, lots: 1,
   positions: [], orders: [], funds: {available:'--',used:'--',collateral:'--'},
   liveLtps: {}, wsConnected: false, toasts: [], clock: '',
+  brokerageSaved: 0,
 };
 
 let toastId = 0;
@@ -213,18 +214,25 @@ function connectWs() {
       const m = JSON.parse(e.data);
       if (m.type === 'order_result') {
         const d = m.data, ms = m.elapsed >= 0 ? ` (${m.elapsed}ms)` : '';
-        if (d.stat === 'Ok' || d.nOrdNo) addToast(`${m.action||'Order'} #${d.nOrdNo||''}${ms}`, 'success');
+        if (d.stat === 'Ok' || d.nOrdNo) {
+          addToast(`${m.action||'Order'} #${d.nOrdNo||''}${ms}`, 'success');
+          if (m.brokerageSaved !== undefined) { state.brokerageSaved = m.brokerageSaved; renderFunds(); }
+        }
         else addToast(`${m.action||'Order'} failed: ${d.emsg||d.errMsg||''}${ms}`, 'error');
         loadOrders(); loadPositions();
       } else if (m.type === 'order_update' || m.type === 'order_cancelled') {
         const d = m.data;
-        if (d.stat === 'Ok' || d.nOrdNo) addToast(`${m.action||'Order'} #${d.nOrdNo||''}`, 'success');
+        if (d.stat === 'Ok' || d.nOrdNo) {
+          addToast(`${m.action||'Order'} #${d.nOrdNo||''}`, 'success');
+          if (m.brokerageSaved !== undefined) { state.brokerageSaved = m.brokerageSaved; renderFunds(); }
+        }
         else addToast(d.emsg||d.errMsg||'Order failed', 'error');
         loadOrders(); loadPositions();
       } else if (m.type === 'instruments_ready') {
         addToast(`${m.index} instruments loaded`, 'info');
         if (state.authStep === 'terminal') { loadExpiries(); loadChain(); }
       } else if (m.type === 'close_all') {
+        if (m.brokerageSaved !== undefined) { state.brokerageSaved = m.brokerageSaved; renderFunds(); }
         loadPositions(); loadOrders();
       }
     } catch {}
@@ -527,6 +535,8 @@ function renderFunds() {
     <div style="display:flex;align-items:center;gap:4px;padding:0 12px"><span style="color:var(--t-tx3)">Used</span><span class="font-mono" style="font-weight:600;color:var(--t-tx)" data-testid="text-fund-used">${state.funds.used}</span></div>
     <div style="width:1px;height:16px;margin:0 12px;background:var(--t-bd);flex-shrink:0"></div>
     <div style="display:flex;align-items:center;gap:4px;padding:0 12px"><span style="color:var(--t-tx3)">Col</span><span class="font-mono" style="font-weight:600;color:var(--t-tx)" data-testid="text-fund-col">${state.funds.collateral}</span></div>
+    <div style="width:1px;height:16px;margin:0 12px;background:var(--t-bd);flex-shrink:0"></div>
+    <div style="display:flex;align-items:center;gap:4px;padding:0 12px"><span style="color:var(--t-tx3)">Saved</span><span class="font-mono" style="font-weight:600;color:var(--t-gn)" data-testid="text-brokerage-saved">\u20B9${state.brokerageSaved.toLocaleString('en-IN')}</span></div>
   `;
 }
 
@@ -875,6 +885,7 @@ clockIv = setInterval(tickClock, 1000);
     if (r.authenticated) {
       state.authEmail = r.email || '';
       state.traderId = r.traderId || '';
+      state.brokerageSaved = r.brokerageSaved || 0;
       if (r.kotakConnected) {
         state.greeting = r.greeting || '';
         state.authStep = 'terminal';

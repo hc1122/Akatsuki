@@ -1,4 +1,4 @@
-import { pgTable, text, varchar, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, boolean, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -11,6 +11,7 @@ export const traders = pgTable("traders", {
   mpin: text("mpin"),
   ucc: text("ucc"),
   hasCredentials: boolean("has_credentials").default(false),
+  brokerageSaved: integer("brokerage_saved").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

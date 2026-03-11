@@ -1,6 +1,6 @@
 import { traders, type Trader } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { randomUUID, createCipheriv, createDecipheriv, randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -77,4 +77,16 @@ export function decryptCredentials(trader: Trader): { accessToken: string; mobil
   } catch {
     return null;
   }
+}
+
+export async function incrementBrokerageSaved(traderId: string, amount: number = 10): Promise<number> {
+  const result = await db.execute(
+    sql`UPDATE traders SET brokerage_saved = brokerage_saved + ${amount} WHERE id = ${traderId} RETURNING brokerage_saved`
+  );
+  return (result.rows[0] as any)?.brokerage_saved || 0;
+}
+
+export async function getBrokerageSaved(traderId: string): Promise<number> {
+  const [result] = await db.select({ brokerageSaved: traders.brokerageSaved }).from(traders).where(eq(traders.id, traderId));
+  return result?.brokerageSaved || 0;
 }

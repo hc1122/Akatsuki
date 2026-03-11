@@ -57,6 +57,7 @@ export default function Terminal() {
   const [positions, setPositions] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [funds, setFunds] = useState({ available: "--", used: "--", collateral: "--" });
+  const [brokerageSaved, setBrokerageSaved] = useState(0);
   const [liveLtps, setLiveLtps] = useState<Record<string, number>>({});
   const [wsConnected, setWsConnected] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -91,6 +92,7 @@ export default function Terminal() {
         if (d.authenticated) {
           setAuthEmail(d.email || "");
           setTraderId(d.traderId || "");
+          setBrokerageSaved(d.brokerageSaved || 0);
           if (d.kotakConnected) {
             setGreeting(d.greeting || "");
             setAuthStep("terminal");
@@ -134,6 +136,7 @@ export default function Terminal() {
           const ms = m.elapsed >= 0 ? ` (${m.elapsed}ms)` : "";
           if (d.stat === "Ok" || d.nOrdNo) {
             addToast(`${m.action || "Order"} #${d.nOrdNo || ""}${ms}`, "success");
+            if (m.brokerageSaved !== undefined) setBrokerageSaved(m.brokerageSaved);
           } else {
             addToast(`${m.action || "Order"} failed: ${d.emsg || d.errMsg || ""}${ms}`, "error");
           }
@@ -143,6 +146,7 @@ export default function Terminal() {
           const d = m.data;
           if (d.stat === "Ok" || d.nOrdNo) {
             addToast(`${m.action || "Order"} #${d.nOrdNo || ""}`, "success");
+            if (m.brokerageSaved !== undefined) setBrokerageSaved(m.brokerageSaved);
           } else {
             addToast(d.emsg || d.errMsg || "Order failed", "error");
           }
@@ -151,6 +155,7 @@ export default function Terminal() {
         } else if (m.type === "instruments_ready") {
           addToast(`${m.index} instruments loaded`, "info");
         } else if (m.type === "close_all") {
+          if (m.brokerageSaved !== undefined) setBrokerageSaved(m.brokerageSaved);
           loadPositions();
           loadOrders();
         }
@@ -662,6 +667,11 @@ export default function Terminal() {
         <FundItem label="Used" value={funds.used} />
         <div className="w-px h-4 mx-1.5 md:mx-3 shrink-0" style={{ background: "var(--t-bd)" }} />
         <FundItem label="Col" value={funds.collateral} />
+        <div className="w-px h-4 mx-1.5 md:mx-3 shrink-0" style={{ background: "var(--t-bd)" }} />
+        <div className="flex items-center gap-1 px-1.5 md:px-3">
+          <span style={{ color: "var(--t-tx3)" }}>Saved</span>
+          <span className="font-mono font-semibold" style={{ color: "var(--t-gn)" }} data-testid="text-brokerage-saved">{"\u20B9"}{brokerageSaved.toLocaleString("en-IN")}</span>
+        </div>
       </div>
 
       <div className="flex items-center gap-1.5 md:gap-2 px-2 md:px-4 py-1.5 md:py-2 shrink-0 flex-wrap" style={{ background: "var(--t-sf)", borderBottom: "1px solid var(--t-bd)" }}>

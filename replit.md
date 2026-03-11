@@ -58,6 +58,12 @@ Multi-user options scalping terminal for Kotak Securities NEO API. Dark terminal
 - `POST /api/order/close-all` - Close all positions
 - `POST /api/reload/:idx` - Reload instruments
 
+## Brokerage Saved Tracker
+- Every successful order (stat=Ok or nOrdNo present) increments `brokerage_saved` by ₹10 in the `traders` table
+- Displayed in the funds bar as "Saved ₹X" in green
+- Updated in real-time via WebSocket broadcast (`brokerageSaved` field in order_result/order_update messages)
+- Persisted in PostgreSQL, loaded on session restore
+
 ## Environment Secrets
 - `SESSION_SECRET` - Express session secret
 - (Per-user: ACCESS_TOKEN, MOBILE_NUMBER, MPIN, UCC stored in DB)

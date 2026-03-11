@@ -196,6 +196,7 @@ export async function registerRoutes(
       kotakConnected: kotakSession?.loggedIn || false,
       greeting: kotakSession?.greetingName || "",
       traderId: trader.id,
+      brokerageSaved: trader.brokerageSaved || 0,
     });
   });
 
@@ -329,13 +330,23 @@ export async function registerRoutes(
               const pr = (ltp * (parsed.tt === "B" ? 1.002 : 0.998)).toFixed(2);
               const limitData = JSON.stringify({ ...parsed, pt: "L", pr });
               const d2 = await kotak.fastOrder(s, limitData);
-              broadcastToUser(userId, { type: "order_result", data: d2, action: action || "", elapsed });
+              if (d2.stat === "Ok" || d2.nOrdNo) {
+                const newBrokerage = await storage.incrementBrokerageSaved(userId);
+                broadcastToUser(userId, { type: "order_result", data: d2, action: action || "", elapsed, brokerageSaved: newBrokerage });
+              } else {
+                broadcastToUser(userId, { type: "order_result", data: d2, action: action || "", elapsed });
+              }
               return;
             }
           } catch {}
         }
 
-        broadcastToUser(userId, { type: "order_result", data, action: action || "", elapsed });
+        if (data.stat === "Ok" || data.nOrdNo) {
+          const newBrokerage = await storage.incrementBrokerageSaved(userId);
+          broadcastToUser(userId, { type: "order_result", data, action: action || "", elapsed, brokerageSaved: newBrokerage });
+        } else {
+          broadcastToUser(userId, { type: "order_result", data, action: action || "", elapsed });
+        }
       } catch (e: any) {
         log(`FAST ORDER error: ${e.message}`, "order");
         broadcastToUser(userId, { type: "order_result", data: { stat: "Not_Ok", emsg: e.message }, action: action || "", elapsed: -1 });
@@ -364,7 +375,12 @@ export async function registerRoutes(
       }
     }
 
-    broadcastToUser(s.userId, { type: "order_update", data: r, action: `${tt === "B" ? "BUY" : "SELL"} ${ts} x${qty}` });
+    if (r.stat === "Ok" || r.nOrdNo) {
+      const newBrokerage = await storage.incrementBrokerageSaved(s.userId);
+      broadcastToUser(s.userId, { type: "order_update", data: r, action: `${tt === "B" ? "BUY" : "SELL"} ${ts} x${qty}`, brokerageSaved: newBrokerage });
+    } else {
+      broadcastToUser(s.userId, { type: "order_update", data: r, action: `${tt === "B" ? "BUY" : "SELL"} ${ts} x${qty}` });
+    }
     res.json(r);
   });
 
@@ -438,6 +454,7 @@ export async function registerRoutes(
         return res.json({ status: "error", message: "No positions to close" });
       }
       const results: any[] = [];
+      let successCount = 0;
       for (const pos of posResp.data) {
         const buyQ = parseInt(pos.flBuyQty ?? pos.cfBuyQty ?? pos.buyQty ?? "0");
         const sellQ = parseInt(pos.flSellQty ?? pos.cfSellQty ?? pos.sellQty ?? "0");
@@ -450,8 +467,13 @@ export async function registerRoutes(
         if (!ts || !es) continue;
         const r = await kotak.placeOrder(s, es, ts, tt, qty);
         results.push({ symbol: ts, qty, side: tt, result: r });
+        if (r.stat === "Ok" || r.nOrdNo) successCount++;
       }
-      broadcastToUser(s.userId, { type: "close_all", count: results.length });
+      let newBrokerage: number | undefined;
+      if (successCount > 0) {
+        newBrokerage = await storage.incrementBrokerageSaved(s.userId, successCount * 10);
+      }
+      broadcastToUser(s.userId, { type: "close_all", count: results.length, brokerageSaved: newBrokerage });
       res.json({ status: "ok", closed: results.length, results });
     } catch (e: any) {
       res.json({ status: "error", message: e.message });
