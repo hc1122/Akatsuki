@@ -226,7 +226,9 @@ function connectWs() {
         if (m.brokerageSaved !== undefined) { state.brokerageSaved = m.brokerageSaved; renderFunds(); }
       } else if (m.type === 'instruments_ready') {
         addToast(`${m.index} instruments loaded`, 'info');
-        if (state.authStep === 'terminal') { loadExpiries(); loadChain(); }
+        if (state.authStep === 'terminal' && m.index.toUpperCase() === state.currentIndex.toUpperCase()) {
+          loadExpiries();
+        }
       } else if (m.type === 'close_all') {
         loadPositions(); loadOrders();
       }
@@ -251,7 +253,7 @@ async function loadExpiries() {
     else if (state.expiries.length > 0) state.selectedExpiry = state.expiries[0].label;
     renderControls();
     loadChain();
-  } catch {}
+  } catch (e) { console.error('loadExpiries error:', e); }
 }
 
 async function loadChain() {
@@ -264,7 +266,7 @@ async function loadChain() {
     state.chain = r.chain || [];
     const atmIdx = state.chain.findIndex(row => row.is_atm);
     if (atmIdx >= 0) { state.selectedStrike = state.chain[atmIdx]; state.selectedIdx = atmIdx; }
-  } catch {}
+  } catch (e) { console.error('loadChain error:', e); }
   state.chainLoading = false;
   updatePrecomputed();
   renderChain(); renderActionBar(); renderMobileBar();

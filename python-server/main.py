@@ -295,6 +295,10 @@ def build_options_db(index_name: str):
     elapsed = (time.time() - t0) * 1000
     total_s = sum(len(exp) for exp in db.values())
     log.info(f"{key} DB built: {len(sorted_exp)} expiries, {total_s} strike-entries, {elapsed:.0f}ms")
+    if sorted_exp:
+        log.info(f"{key} expiry range: {sorted_exp[0][0]} to {sorted_exp[-1][0]}")
+    else:
+        log.warning(f"{key} NO future expiries found (today={date.today()}, total parsed dates in db: {len(db)} labels)")
 
 def query_chain_fast(index_name: str, spot: float, num_strikes: int = 5, expiry_label: str = ""):
     key = index_name.upper()
@@ -757,7 +761,10 @@ async def api_spot(idx: str, request: Request):
 @app.get("/api/expiries/{idx}")
 async def api_expiries(idx: str, request: Request):
     require_kotak(request)
-    return get_expiries(idx)
+    result = get_expiries(idx)
+    if not result.get("expiries"):
+        log.warning(f"Expiries empty for {idx} — expiry_list keys: {list(expiry_list.keys())}, options_db keys: {list(options_db.keys())}")
+    return result
 
 @app.get("/api/option-chain/{idx}")
 async def api_option_chain(idx: str, request: Request, strikes: int = 5, expiry: str = ""):
