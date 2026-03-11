@@ -226,9 +226,7 @@ function connectWs() {
         if (m.brokerageSaved !== undefined) { state.brokerageSaved = m.brokerageSaved; renderFunds(); }
       } else if (m.type === 'instruments_ready') {
         addToast(`${m.index} instruments loaded`, 'info');
-        if (state.authStep === 'terminal' && m.index.toUpperCase() === state.currentIndex.toUpperCase()) {
-          loadExpiries();
-        }
+        if (state.authStep === 'terminal') { loadExpiries(); loadChain(); }
       } else if (m.type === 'close_all') {
         loadPositions(); loadOrders();
       }
