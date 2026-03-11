@@ -242,28 +242,49 @@ def build_options_db(index_name: str):
     csv_key = "nse_fo" if key in ["NIFTY","BANKNIFTY","FINNIFTY"] else "bse_fo"
     csv_path = csv_cache_files.get(csv_key)
     if not csv_path or not Path(csv_path).exists():
-        log.warning(f"No CSV for {key}")
+        log.warning(f"No CSV for {key} — csv_cache_files keys: {list(csv_cache_files.keys())}")
         return
     t0 = time.time()
+    log.info(f"[{key}] Parsing CSV: {csv_path} ({Path(csv_path).stat().st_size/(1024*1024):.1f}MB)")
+    with open(csv_path, 'r') as f:
+        header_line = f.readline().strip()
+    raw_cols = [c.strip().replace(";","") for c in header_line.split(",")]
+    log.info(f"[{key}] CSV columns ({len(raw_cols)}): {raw_cols[:15]}")
     alt_needed = ["pSymbol","pExchSeg","pTrdSymbol","pOptionType","lLotSize","pSymbolName","pInstType","dStrikePrice"]
+    missing = [c for c in alt_needed if c not in raw_cols]
+    if missing:
+        log.warning(f"[{key}] Missing columns: {missing} — will try case-insensitive match")
+        col_map = {c.lower(): c for c in raw_cols}
+        for m in missing:
+            if m.lower() in col_map:
+                log.info(f"[{key}] Found '{col_map[m.lower()]}' for '{m}'")
     try:
         df = pd.read_csv(csv_path, usecols=lambda c: c.strip().replace(";","") in alt_needed, dtype=str, na_filter=False, engine="c")
     except Exception as e:
         log.error(f"CSV parse error for {key}: {e}")
         return
     df.columns = [c.strip().replace(";","") for c in df.columns]
+    log.info(f"[{key}] DataFrame: {len(df)} rows, columns: {list(df.columns)}")
     for col in alt_needed:
         if col not in df.columns:
             df[col] = ""
     df["pSymbolName"] = df["pSymbolName"].str.upper().str.strip()
     df["pOptionType"] = df["pOptionType"].str.strip()
     df["pTrdSymbol"] = df["pTrdSymbol"].str.upper().str.strip()
+    unique_syms = df["pSymbolName"].unique()[:10].tolist()
+    unique_opts = df["pOptionType"].unique().tolist()
+    unique_inst = df["pInstType"].str.upper().str.strip().unique()[:10].tolist()
+    log.info(f"[{key}] Unique pSymbolName (first 10): {unique_syms}")
+    log.info(f"[{key}] Unique pOptionType: {unique_opts}")
+    log.info(f"[{key}] Unique pInstType (first 10): {unique_inst}")
     mask = (df["pSymbolName"] == key) & (df["pOptionType"].isin(["CE","PE"]))
     if key in ["NIFTY","BANKNIFTY","FINNIFTY"]:
         mask = mask & (df["pInstType"].str.upper().str.strip() == "OPTIDX")
     filtered = df[mask]
+    log.info(f"[{key}] After filter: {len(filtered)} rows (from {len(df)} total)")
     if filtered.empty:
-        log.warning(f"No options found for {key}")
+        sym_match = (df["pSymbolName"] == key).sum()
+        log.warning(f"No options found for {key} — symbol matches: {sym_match}, CE/PE in symbol matches: {((df['pSymbolName']==key) & df['pOptionType'].isin(['CE','PE'])).sum()}")
         return
     today_d = date.today()
     db: dict = {}
