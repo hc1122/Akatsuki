@@ -491,13 +491,17 @@ async def download_csv(index_name: str, ks: KotakSession):
     file_path = DATA_DIR / f"{csv_key}_{today_str}.csv"
     if file_path.exists() and file_path.stat().st_size > 1000:
         csv_cache_files[csv_key] = str(file_path)
+        log.info(f"CSV cache hit: {file_path} ({file_path.stat().st_size/(1024*1024):.1f}MB)")
         return
     paths = await fetch_scrip_paths(ks)
+    log.info(f"Scrip paths for {csv_key}: {len(paths)} total, base_url={ks.base_url}")
     target = [p for p in paths if csv_key in p]
     if not target:
+        log.warning(f"No CSV path found for {csv_key} in scrip paths: {paths[:5]}")
         return
-    log.info(f"Downloading {csv_key}...")
+    log.info(f"Downloading {csv_key} from {target[0][:80]}...")
     r = await http_client.get(target[0], headers=ks.quote_headers())
+    log.info(f"CSV download response: status={r.status_code}, size={len(r.text)} chars")
     text = r.text
     first_nl = text.find("\n")
     if first_nl > 0:
@@ -561,11 +565,15 @@ async def preload_instruments(user_id: str):
         try:
             await download_csv(idx, ks)
             build_options_db(idx)
-            await broadcast_to_user(user_id, {"type": "instruments_ready", "index": idx})
+            key = idx.upper()
+            if key in options_db and options_db[key] and key in expiry_list and expiry_list[key]:
+                await broadcast_to_user(user_id, {"type": "instruments_ready", "index": idx})
+            else:
+                log.warning(f"{idx} preload: CSV downloaded but no instruments built — options_db has {len(options_db.get(key,{}))} entries, expiry_list has {len(expiry_list.get(key,[]))} entries")
         except Exception as e:
-            log.error(f"{idx} preload error: {e}")
+            log.error(f"{idx} preload error: {e}", exc_info=True)
         await asyncio.sleep(0.2)
-    log.info("All instruments loaded into memory")
+    log.info(f"Instruments preload complete — options_db keys: {list(options_db.keys())}, expiry_list keys: {list(expiry_list.keys())}")
 
 # ─── FastAPI app ───
 
