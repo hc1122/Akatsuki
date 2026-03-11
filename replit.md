@@ -59,10 +59,12 @@ Multi-user options scalping terminal for Kotak Securities NEO API. Dark terminal
 - `POST /api/reload/:idx` - Reload instruments
 
 ## Brokerage Saved Tracker
-- Every successful order (stat=Ok or nOrdNo present) increments `brokerage_saved` by ₹10 in the `traders` table
+- Brokerage counted only for orders with final status "complete" or "traded" (not at placement time)
+- Checked when orderbook is fetched — new traded/completed order numbers are tracked in-memory (`countedOrders` / `counted_orders`) to prevent double-counting
+- Each new traded order increments `brokerage_saved` by ₹10 in the `traders` table (atomic SQL: `brokerage_saved = brokerage_saved + N`)
 - Displayed in the funds bar as "Saved ₹X" in green
-- Updated in real-time via WebSocket broadcast (`brokerageSaved` field in order_result/order_update messages)
-- Persisted in PostgreSQL, loaded on session restore
+- Updated in real-time via WebSocket `brokerage_update` message
+- Persisted in PostgreSQL, loaded on session restore; in-memory set cleared on logout
 
 ## Environment Secrets
 - `SESSION_SECRET` - Express session secret

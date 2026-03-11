@@ -136,7 +136,6 @@ export default function Terminal() {
           const ms = m.elapsed >= 0 ? ` (${m.elapsed}ms)` : "";
           if (d.stat === "Ok" || d.nOrdNo) {
             addToast(`${m.action || "Order"} #${d.nOrdNo || ""}${ms}`, "success");
-            if (m.brokerageSaved !== undefined) setBrokerageSaved(m.brokerageSaved);
           } else {
             addToast(`${m.action || "Order"} failed: ${d.emsg || d.errMsg || ""}${ms}`, "error");
           }
@@ -146,16 +145,16 @@ export default function Terminal() {
           const d = m.data;
           if (d.stat === "Ok" || d.nOrdNo) {
             addToast(`${m.action || "Order"} #${d.nOrdNo || ""}`, "success");
-            if (m.brokerageSaved !== undefined) setBrokerageSaved(m.brokerageSaved);
           } else {
             addToast(d.emsg || d.errMsg || "Order failed", "error");
           }
           loadOrders();
           loadPositions();
+        } else if (m.type === "brokerage_update") {
+          if (m.brokerageSaved !== undefined) setBrokerageSaved(m.brokerageSaved);
         } else if (m.type === "instruments_ready") {
           addToast(`${m.index} instruments loaded`, "info");
         } else if (m.type === "close_all") {
-          if (m.brokerageSaved !== undefined) setBrokerageSaved(m.brokerageSaved);
           loadPositions();
           loadOrders();
         }
