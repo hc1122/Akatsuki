@@ -521,9 +521,15 @@ async def download_csv(index_name: str, ks: KotakSession):
         log.warning(f"No CSV path found for {csv_key} in scrip paths: {paths[:5]}")
         return
     log.info(f"Downloading {csv_key} from {target[0][:80]}...")
-    r = await http_client.get(target[0], headers=ks.quote_headers())
+    r = await http_client.get(target[0])
     log.info(f"CSV download response: status={r.status_code}, size={len(r.text)} chars")
+    if r.status_code != 200:
+        log.error(f"CSV download failed for {csv_key}: HTTP {r.status_code} — {r.text[:200]}")
+        return
     text = r.text
+    if not text or len(text) < 100 or text.strip().startswith("<?xml"):
+        log.error(f"CSV download returned invalid data for {csv_key}: {text[:200]}")
+        return
     first_nl = text.find("\n")
     if first_nl > 0:
         header = text[:first_nl]

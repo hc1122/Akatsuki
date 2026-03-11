@@ -1,0 +1,102 @@
+
+(venv) hc@hc:~/kmc$ uvicorn main:app --host 0.0.0.0 --port 5000 --loop uvloop
+INFO:     Started server process [201177]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:5000 (Press CTRL+C to quit)
+INFO:     152.59.74.64:37312 - "GET /api/spot/BANKNIFTY HTTP/1.1" 401 Unauthorized
+INFO:     152.59.74.64:37340 - "GET /api/limits HTTP/1.1" 401 Unauthorized
+INFO:     152.59.74.64:37316 - "GET /api/positions HTTP/1.1" 401 Unauthorized
+INFO:     ('152.59.74.64', 37332) - "WebSocket /ws" [accepted]
+INFO:     connection open
+INFO:     152.59.74.64:37312 - "GET / HTTP/1.1" 200 OK
+INFO:     connection closed
+INFO:     152.59.74.64:37312 - "GET /api/auth/session HTTP/1.1" 200 OK
+INFO:     152.59.74.64:28886 - "GET /static/manifest.json HTTP/1.1" 304 Not Modified
+INFO:     152.59.74.64:40632 - "POST /api/auth/login HTTP/1.1" 200 OK
+2026-03-11 05:32:54,008 [INFO] HTTP Request: POST https://mis.kotaksecurities.com/login/1.0/tradeApiLogin "HTTP/1.1 200 OK"
+2026-03-11 05:32:54,244 [INFO] HTTP Request: POST https://mis.kotaksecurities.com/login/1.0/tradeApiValidate "HTTP/1.1 200 OK"
+INFO:     152.59.74.64:40940 - "POST /api/kotak/connect HTTP/1.1" 200 OK
+2026-03-11 05:32:54,624 [WARNING] Expiries empty for NIFTY — expiry_list keys: [], options_db keys: []
+INFO:     152.59.74.64:40962 - "GET /api/expiries/NIFTY HTTP/1.1" 200 OK
+INFO:     ('152.59.74.64', 40954) - "WebSocket /ws" [accepted]
+INFO:     connection open
+2026-03-11 05:32:54,997 [INFO] HTTP Request: POST https://e21.kotaksecurities.com/quick/user/limits "HTTP/1.1 200 OK"
+INFO:     152.59.74.64:40940 - "GET /api/limits HTTP/1.1" 200 OK
+2026-03-11 05:32:55,161 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/nse_cm%7CNifty%2050/ltp "HTTP/1.1 200 OK"
+2026-03-11 05:32:55,166 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/quick/user/positions "HTTP/1.1 200 OK"
+INFO:     152.59.74.64:40960 - "GET /api/positions HTTP/1.1" 200 OK
+2026-03-11 05:32:55,207 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/quick/user/orders "HTTP/1.1 200 OK"
+INFO:     152.59.74.64:40974 - "GET /api/orderbook HTTP/1.1" 200 OK
+2026-03-11 05:32:55,212 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/nse_cm%7CNifty%2050/ltp "HTTP/1.1 200 OK"
+INFO:     152.59.74.64:40972 - "GET /api/spot/NIFTY HTTP/1.1" 200 OK
+2026-03-11 05:32:55,362 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/nse_cm%7CNifty%2050/ltp "HTTP/1.1 200 OK"
+INFO:     152.59.74.64:40962 - "GET /api/option-chain/NIFTY?strikes=5&expiry= HTTP/1.1" 200 OK
+2026-03-11 05:32:55,374 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/nse_cm%7CNifty%20Bank/ltp "HTTP/1.1 200 OK"
+2026-03-11 05:32:55,593 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/bse_cm%7CSENSEX/ltp "HTTP/1.1 200 OK"
+2026-03-11 05:32:56,328 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/masterscrip/file-paths "HTTP/1.1 200 OK"
+2026-03-11 05:32:56,328 [INFO] Scrip paths for nse_fo: 7 total, base_url=https://e21.kotaksecurities.com
+2026-03-11 05:32:56,328 [INFO] Downloading nse_fo from https://lapi.kotaksecurities.com/wso2-scripmaster/v1/prod/2026-03-11/transformed...
+2026-03-11 05:32:56,775 [INFO] HTTP Request: GET https://lapi.kotaksecurities.com/wso2-scripmaster/v1/prod/2026-03-11/transformed/nse_fo.csv "HTTP/1.1 400 Bad Request"
+2026-03-11 05:32:56,815 [INFO] CSV download response: status=400, size=434 chars
+2026-03-11 05:32:56,815 [INFO] Saved nse_fo: 0.0MB
+2026-03-11 05:32:56,815 [INFO] [NIFTY] Parsing CSV: /home/hc/kmc/data/nse_fo_2026-03-11.csv (0.0MB)
+2026-03-11 05:32:56,815 [INFO] [NIFTY] CSV columns (1): ['<?xml version="1.0" encoding="UTF-8"?>']
+2026-03-11 05:32:56,815 [WARNING] [NIFTY] Missing columns: ['pSymbol', 'pExchSeg', 'pTrdSymbol', 'pOptionType', 'lLotSize', 'pSymbolName', 'pInstType', 'dStrikePrice'] — will try case-insensitive match
+2026-03-11 05:32:56,817 [INFO] [NIFTY] DataFrame: 0 rows, columns: []
+2026-03-11 05:32:56,820 [INFO] [NIFTY] Unique pSymbolName (first 10): []
+2026-03-11 05:32:56,820 [INFO] [NIFTY] Unique pOptionType: []
+2026-03-11 05:32:56,820 [INFO] [NIFTY] Unique pInstType (first 10): []
+2026-03-11 05:32:56,821 [INFO] [NIFTY] After filter: 0 rows (from 0 total)
+2026-03-11 05:32:56,821 [WARNING] No options found for NIFTY — symbol matches: 0, CE/PE in symbol matches: 0
+2026-03-11 05:32:56,821 [WARNING] NIFTY preload: CSV downloaded but no instruments built — options_db has 0 entries, expiry_list has 0 entries
+INFO:     152.59.74.64:40974 - "GET /api/spot/NIFTY HTTP/1.1" 200 OK
+2026-03-11 05:32:57,792 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/nse_cm%7CNifty%2050/ltp "HTTP/1.1 200 OK"
+2026-03-11 05:32:57,988 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/nse_cm%7CNifty%20Bank/ltp "HTTP/1.1 200 OK"
+2026-03-11 05:32:58,180 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/bse_cm%7CSENSEX/ltp "HTTP/1.1 200 OK"
+2026-03-11 05:32:58,205 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/masterscrip/file-paths "HTTP/1.1 200 OK"
+2026-03-11 05:32:58,206 [INFO] Scrip paths for nse_fo: 7 total, base_url=https://e21.kotaksecurities.com
+2026-03-11 05:32:58,206 [INFO] Downloading nse_fo from https://lapi.kotaksecurities.com/wso2-scripmaster/v1/prod/2026-03-11/transformed...
+2026-03-11 05:32:58,394 [INFO] HTTP Request: GET https://lapi.kotaksecurities.com/wso2-scripmaster/v1/prod/2026-03-11/transformed/nse_fo.csv "HTTP/1.1 400 Bad Request"
+2026-03-11 05:32:58,434 [INFO] CSV download response: status=400, size=434 chars
+2026-03-11 05:32:58,435 [INFO] Saved nse_fo: 0.0MB
+2026-03-11 05:32:58,435 [INFO] [BANKNIFTY] Parsing CSV: /home/hc/kmc/data/nse_fo_2026-03-11.csv (0.0MB)
+2026-03-11 05:32:58,435 [INFO] [BANKNIFTY] CSV columns (1): ['<?xml version="1.0" encoding="UTF-8"?>']
+2026-03-11 05:32:58,435 [WARNING] [BANKNIFTY] Missing columns: ['pSymbol', 'pExchSeg', 'pTrdSymbol', 'pOptionType', 'lLotSize', 'pSymbolName', 'pInstType', 'dStrikePrice'] — will try case-insensitive match
+2026-03-11 05:32:58,436 [INFO] [BANKNIFTY] DataFrame: 0 rows, columns: []
+2026-03-11 05:32:58,438 [INFO] [BANKNIFTY] Unique pSymbolName (first 10): []
+2026-03-11 05:32:58,438 [INFO] [BANKNIFTY] Unique pOptionType: []
+2026-03-11 05:32:58,438 [INFO] [BANKNIFTY] Unique pInstType (first 10): []
+2026-03-11 05:32:58,438 [INFO] [BANKNIFTY] After filter: 0 rows (from 0 total)
+2026-03-11 05:32:58,439 [WARNING] No options found for BANKNIFTY — symbol matches: 0, CE/PE in symbol matches: 0
+2026-03-11 05:32:58,439 [WARNING] BANKNIFTY preload: CSV downloaded but no instruments built — options_db has 0 entries, expiry_list has 0 entries
+2026-03-11 05:32:59,653 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/quick/user/positions "HTTP/1.1 200 OK"
+INFO:     152.59.74.64:40974 - "GET /api/positions HTTP/1.1" 200 OK                     2026-03-11 05:32:59,942 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/masterscrip/file-paths "HTTP/1.1 200 OK"
+2026-03-11 05:32:59,943 [INFO] Scrip paths for bse_fo: 7 total, base_url=https://e21.kotaksecurities.com
+2026-03-11 05:32:59,943 [INFO] Downloading bse_fo from https://lapi.kotaksecurities.com/wso2-scripmaster/v1/prod/2026-03-11/transformed...
+2026-03-11 05:33:00,134 [INFO] HTTP Request: GET https://lapi.kotaksecurities.com/wso2-scripmaster/v1/prod/2026-03-11/transformed/bse_fo.csv "HTTP/1.1 400 Bad Request"
+2026-03-11 05:33:00,176 [INFO] CSV download response: status=400, size=414 chars
+2026-03-11 05:33:00,176 [INFO] Saved bse_fo: 0.0MB
+2026-03-11 05:33:00,176 [INFO] [SENSEX] Parsing CSV: /home/hc/kmc/data/bse_fo_2026-03-11.csv (0.0MB)
+2026-03-11 05:33:00,176 [INFO] [SENSEX] CSV columns (1): ['<?xml version="1.0" encoding="UTF-8"?>']
+2026-03-11 05:33:00,176 [WARNING] [SENSEX] Missing columns: ['pSymbol', 'pExchSeg', 'pTrdSymbol', 'pOptionType', 'lLotSize', 'pSymbolName', 'pInstType', 'dStrikePrice'] — will try case-insensitive match
+2026-03-11 05:33:00,177 [INFO] [SENSEX] DataFrame: 0 rows, columns: []
+2026-03-11 05:33:00,179 [INFO] [SENSEX] Unique pSymbolName (first 10): []
+2026-03-11 05:33:00,179 [INFO] [SENSEX] Unique pOptionType: []
+2026-03-11 05:33:00,179 [INFO] [SENSEX] Unique pInstType (first 10): []
+2026-03-11 05:33:00,179 [INFO] [SENSEX] After filter: 0 rows (from 0 total)
+2026-03-11 05:33:00,180 [WARNING] No options found for SENSEX — symbol matches: 0, CE/PE in symbol matches: 0
+2026-03-11 05:33:00,180 [WARNING] SENSEX preload: CSV downloaded but no instruments built — options_db has 0 entries, expiry_list has 0 entries
+2026-03-11 05:33:00,380 [INFO] Instruments preload complete — options_db keys: [], expiry_list keys: []
+2026-03-11 05:33:00,406 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/nse_cm%7CNifty%2050/ltp "HTTP/1.1 200 OK"
+2026-03-11 05:33:00,628 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/nse_cm%7CNifty%20Bank/ltp "HTTP/1.1 200 OK"
+2026-03-11 05:33:00,878 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/bse_cm%7CSENSEX/ltp "HTTP/1.1 200 OK"                      2026-03-11 05:33:03,100 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/nse_cm%7CNifty%2050/ltp "HTTP/1.1 200 OK"
+2026-03-11 05:33:03,325 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/nse_cm%7CNifty%20Bank/ltp "HTTP/1.1 200 OK"
+2026-03-11 05:33:03,543 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/bse_cm%7CSENSEX/ltp "HTTP/1.1 200 OK"
+INFO:     connection closed
+2026-03-11 05:33:05,759 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/nse_cm%7CNifty%2050/ltp "HTTP/1.1 200 OK"
+2026-03-11 05:33:05,982 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/nse_cm%7CNifty%20Bank/ltp "HTTP/1.1 200 OK"
+2026-03-11 05:33:06,201 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/bse_cm%7CSENSEX/ltp "HTTP/1.1 200 OK"
+2026-03-11 05:33:08,423 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/nse_cm%7CNifty%2050/ltp "HTTP/1.1 200 OK"
+2026-03-11 05:33:08,638 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/nse_cm%7CNifty%20Bank/ltp "HTTP/1.1 200 OK"
+2026-03-11 05:33:08,859 [INFO] HTTP Request: GET https://e21.kotaksecurities.com/script-details/1.0/quotes/neosymbol/bse_cm%7CSENSEX/ltp "HTTP/1.1 200 OK"
